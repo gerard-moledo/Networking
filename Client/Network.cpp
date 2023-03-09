@@ -25,6 +25,29 @@ bool InitializeNetwork() {
 	return true;
 }
 
-void SendData(void* data) {
-	sendto(Socket, (char *) data, sizeof (char*), 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
+void SendData(char data) {
+	sendto(Socket, &data, sizeof (char*), 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
+}
+
+bool Listen() {
+	FD_ZERO(&readSet);
+	FD_SET(Socket, &readSet);
+	timeval timeout{ 0, 0 };
+	int selectResult = select(NULL, &readSet, nullptr, nullptr, &timeout);
+	if (selectResult == SOCKET_ERROR) {
+		printf("select() failed: %d\n", WSAGetLastError());
+		return false;
+	}
+
+	return readSet.fd_count > 0;
+}
+
+void Receive(Packet* packet) {
+	int recvResult = recvfrom(Socket, data, 8, 0, (SOCKADDR*)&serverAddr, &serverAddrSize);
+	if (recvResult == SOCKET_ERROR) {
+		printf("recvfrom() failed: %d\n", WSAGetLastError());
+		return;
+	}
+
+	*packet = *(Packet*)data;
 }
