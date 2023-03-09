@@ -2,52 +2,54 @@
 #include <ws2tcpip.h>
 #include <stdio.h>
 
-SOCKET RecvSocket = INVALID_SOCKET;
+SOCKET Socket = INVALID_SOCKET;
 
-bool InitServer() {
+int main() {
 	WSADATA wsaData;
 	int initResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	if (initResult != 0) {
 		printf("WSAStartup failed: %d\n", initResult);
-		return false;
+		return 1;
 	}
 
 	sockaddr_in RecvAddr;
 
-	RecvSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	Socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	RecvAddr.sin_family = AF_INET;
 	RecvAddr.sin_port = htons(8080);
 	RecvAddr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
 
-	int bindResult = bind(RecvSocket, (SOCKADDR *) &RecvAddr, sizeof(RecvAddr));
+	int bindResult = bind(Socket, (SOCKADDR*)&RecvAddr, sizeof(RecvAddr));
 	if (bindResult == SOCKET_ERROR) {
 		printf("bind() failed: %ld\n", WSAGetLastError());
 		WSACleanup();
-		return false;
+		return 1;
 	}
 
 	sockaddr_in senderAddr;
 	int senderAddrSize = sizeof(senderAddr);
 	char recvBuffer[512];
-	int recvResult;
-	do {
-		recvResult = recvfrom(RecvSocket, recvBuffer, 512, 0, (SOCKADDR*)&senderAddr, &senderAddrSize);
-		if (recvResult > 0) {
-			printf("Bytes received: %d\n", recvResult);
-			printf("Message: %s\n", recvBuffer);
-		}
-		else if (recvResult == 0) {
-			printf("Connection closing...\n");
-		}
-		else {
-			printf("recv failed: %ld\n", WSAGetLastError());
-			closesocket(RecvSocket);
-			WSACleanup();
-			return 1;
-		}
-	} while (recvResult > 0);
+	int selectResult, recvResult;
 
-	closesocket(RecvSocket);
+	fd_set readSet;
+
+	while (true) {
+		FD_ZERO(&readSet);
+		FD_SET(Socket, &readSet);
+		timeval timeout{ 0, 0 };
+		selectResult = select(NULL, &readSet, nullptr, nullptr, &timeout);
+		if (selectResult == SOCKET_ERROR) {
+			printf("select() failed: %d\n", WSAGetLastError());
+			continue;
+		}
+
+		if (readSet.fd_count > 0) {
+			recvResult = recvfrom(Socket, recvBuffer, 512, 0, (SOCKADDR *) & senderAddr, &senderAddrSize);
+			printf("Socket read: %s\n", recvBuffer);
+		}
+	}
+
+	closesocket(Socket);
 	WSACleanup();
 
 	return 0;
