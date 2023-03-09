@@ -26,16 +26,6 @@ bool InitServer() {
 		return false;
 	}
 
-	return true;
-}
-
-int main() {
-	int initialized = InitServer();
-	if (!initialized) {
-		printf("Server initialization failed.\n");
-		return 1;
-	}
-
 	sockaddr_in senderAddr;
 	int senderAddrSize = sizeof(senderAddr);
 	char recvBuffer[512];
