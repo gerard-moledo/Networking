@@ -8,14 +8,6 @@
 
 SOCKET Socket = INVALID_SOCKET;
 
-struct Entity
-{
-	int x = 100;
-	int y = 100;
-	int vx = 0;
-	int vy = 0;
-};
-
 struct Tick
 {
 	float acc;
@@ -24,7 +16,13 @@ struct Tick
 
 struct Packet
 {
-	int x, y;
+	float x, y;
+};
+
+struct EntityState
+{
+	float x;
+	float y;
 };
 
 WSADATA wsaData;
@@ -63,12 +61,11 @@ int main() {
 	// Network vars
 	sockaddr_in senderAddr;
 	int senderAddrSize = sizeof senderAddr;
-	char dataBuffer[8];
-	int selectResult, recvResult, sendResult;
+	char dataBuffer[64];
 	fd_set readSet;
 
 	// Gameplay vars
-	Entity entity;
+	EntityState entityState{400, 500};
 
 	// Game Loop vars
 	auto tCurrent = std::chrono::high_resolution_clock::now();
@@ -79,7 +76,7 @@ int main() {
 	// GAME LOOP
 	while (true) {
 		tCurrent = std::chrono::high_resolution_clock::now();
-		float dt = std::chrono::duration_cast<std::chrono::microseconds>(tCurrent - tPrev).count() / 1000000.0f;
+		float dt = std::chrono::duration_cast<std::chrono::microseconds>(tCurrent - tPrev).count() / (float) 1E6;
 		tPrev = tCurrent;
 		physicsTick.acc += dt;
 		networkTick.acc += dt;
@@ -87,42 +84,35 @@ int main() {
 		FD_ZERO(&readSet);
 		FD_SET(Socket, &readSet);
 		timeval timeout{ 0, 0 };
-		selectResult = select(NULL, &readSet, nullptr, nullptr, &timeout);
+		int selectResult = select(NULL, &readSet, nullptr, nullptr, &timeout);
 		if (selectResult == SOCKET_ERROR) {
 			printf("select() failed: %d\n", WSAGetLastError());
 			continue;
 		}
 		if (readSet.fd_count > 0) {
-			recvResult = recvfrom(Socket, dataBuffer, 8, 0, (SOCKADDR *) &senderAddr, &senderAddrSize);
+			int recvResult = recvfrom(Socket, dataBuffer, 64, 0, (SOCKADDR *) &senderAddr, &senderAddrSize);
 			if (recvResult == SOCKET_ERROR) {
 				printf("recvfrom() failed: %d\n", WSAGetLastError());
 				return 1;
 			}
 
-			char inputBuffer = dataBuffer[0];
-			entity.vx = 0;
-			entity.vy = 0;
-			if (inputBuffer & (1 << 0)) entity.vx += 10;
-			if (inputBuffer & (1 << 1)) entity.vy += 10;
-			if (inputBuffer & (1 << 2)) entity.vx += -10;
-			if (inputBuffer & (1 << 3)) entity.vy += -10;
-
-			std::cout << "Input read: " << std::bitset<8>(inputBuffer) << std::endl;
-			printf("%d\n", entity.x);
+			Packet data = *(Packet*) dataBuffer;
+			entityState.x = data.x;
+			entityState.y = data.y;
 		}
 
 
 		while (physicsTick.acc > physicsTick.step) {
 			physicsTick.acc -= physicsTick.step;
 			
-			entity.x += entity.vx;
-			entity.y += entity.vy;
 		}
 		if (networkTick.acc > networkTick.step) {
 			networkTick.acc = 0;
 
-			Packet packet{ entity.x, entity.y };
-			sendResult = sendto(Socket, (char *) &packet, sizeof packet, 0, (SOCKADDR *) &senderAddr, senderAddrSize);
+			Packet data;
+			data.x = entityState.x;
+			data.y = entityState.y;
+			int sendResult = sendto(Socket, (char*) &data, NULL, 0, (SOCKADDR *) &senderAddr, senderAddrSize);
 		}
 	}
 

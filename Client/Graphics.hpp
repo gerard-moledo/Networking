@@ -6,7 +6,8 @@ enum struct InputType { pressed, held, released };
 void InitializeGraphics();
 
 bool CheckWindowOpen();
-bool CheckInput(char key, InputType type);
+bool CheckKeyInput(char key, InputType type);
+bool CheckMouseInput(int button, InputType type, float* mouseX, float* mouseY);
 
 void BeginGraphics();
 void EndGraphics();

@@ -25,8 +25,8 @@ bool InitializeNetwork() {
 	return true;
 }
 
-void SendData(char data) {
-	sendto(Socket, &data, sizeof (char*), 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
+void SendData(Packet data) {
+	sendto(Socket, (char*) & data, sizeof Packet, 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
 }
 
 bool Listen() {

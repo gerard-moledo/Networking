@@ -14,31 +14,68 @@ int main() {
 	
 	InitializeGraphics();
 
-	Entity entity;
+	Entity entity = Entity(600, 400);
 	Packet packetData;
 
-	char data = 0;
-	char dataLastFrame = 0;
-	std::chrono::steady_clock::duration dPassed[1]{};
+	Packet data;
+	Packet dataLastFrame;
+
+	auto updateDuration = std::chrono::steady_clock::duration{};
+	auto tPrev = std::chrono::steady_clock::now();
+	auto tStacked = tPrev;
 	std::chrono::steady_clock::time_point tPassed[2]{};
-	std::chrono::steady_clock::time_point tPrev = std::chrono::steady_clock::now();
-	std::chrono::steady_clock::time_point tStacked = tPrev;
+
+	bool shouldInterpolate = false;
 	float tInterpolate = 0.0f;
-	float timestep = 0.01f;
 	while (CheckWindowOpen()) {
 		auto tCurrent = std::chrono::steady_clock::now();
 		auto dt = tCurrent - tPrev;
 		tPrev = tCurrent;
 		tStacked = tStacked + dt;
 
-		if (CheckInput('w', InputType::pressed)) data = data | (1 << 3);
-		if (CheckInput('w', InputType::released)) data = data & ~(1 << 3);
-		if (CheckInput('a', InputType::pressed)) data = data | (1 << 2);
-		if (CheckInput('a', InputType::released)) data = data & ~(1 << 2);
-		if (CheckInput('s', InputType::pressed)) data = data | (1 << 1);
-		if (CheckInput('s', InputType::released)) data = data & ~(1 << 1);
-		if (CheckInput('d', InputType::pressed)) data = data | (1 << 0);
-		if (CheckInput('d', InputType::released)) data = data & ~(1 << 0);
+
+		entity.statePrev = entity.state;
+
+		float mouseX, mouseY;
+		if (CheckMouseInput(0, InputType::pressed, &mouseX, &mouseY)) {
+			if (entity.CheckPointInBody(mouseX, mouseY)) {
+				entity.isSelected = true;
+			}
+		}
+		if (CheckMouseInput(0, InputType::held, &mouseX, &mouseY)) {
+			if (entity.isSelected) {
+				entity.SetPosition(mouseX, mouseY);
+				shouldInterpolate = false;
+			}
+		}
+		if (CheckMouseInput(0, InputType::released, &mouseX, &mouseY)) {
+			if (entity.isSelected) {
+				switch (entity.place) {
+					case Place::deck: {
+						Place targetPlace = Place::hand;
+						entity.SetTarget(400.0f, 525.0f);
+					} break;
+					case Place::hand: 
+					case Place::field: {
+						if (entity.CheckBodyOnField()) {
+							float fieldX, fieldY;
+							entity.PlaceOnField(&fieldX, &fieldY);
+							data.x = fieldX;
+							data.y = fieldY;
+						}
+						else {
+							entity.SetTarget(400, 500);
+							data.x = entity.x;
+							data.y = entity.y;
+						}
+					} break;
+				}
+			}
+			entity.isSelected = false;
+		}
+
+		entity.Update(dt.count() / (float) 1E9);
+
 
 		if (data != dataLastFrame) {
 			dataLastFrame = data;
@@ -48,21 +85,18 @@ int main() {
 		if (Listen()) {
 			tPassed[1] = tPassed[0];
 			tPassed[0] = std::chrono::steady_clock::now();
-			dPassed[0] = tPassed[0] - tPassed[1];
+			updateDuration = tPassed[0] - tPassed[1];
+			shouldInterpolate = true;
 
 			Receive(&packetData);
-
-			entity.xPrev = entity.x;
-			entity.yPrev = entity.y;
-			entity.x = packetData.x;
-			entity.y = packetData.y;
 		}
 
 
-		float tInterpolate = dPassed[0].count() == 0 ? 0 : (float)(tStacked - (tPassed[0])).count() / dPassed[0].count();
+		float tInterpolate = updateDuration.count() == 0 ? 0 : (float)(tStacked - (tPassed[0])).count() / updateDuration.count();
 		
 		BeginGraphics();
-			entity.Render(tInterpolate);
+			if (shouldInterpolate) entity.Render(tInterpolate);
+			else				   entity.Render(1);
 		EndGraphics();
 	}
 	return 0;
