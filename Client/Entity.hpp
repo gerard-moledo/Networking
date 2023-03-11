@@ -3,44 +3,47 @@
 
 enum struct Place { deck, hand, field };
 
-struct EntityState
+struct CardState
 {
-	float x;
-	float y;
+	Place place;
 };
 
-class Entity
+class Card
 {
 public:
-	float x;
-	float y;
+	float x = 705;
+	float y = 550;
 	float width = 50;
 	float height = 70;
 
 	bool isTargeting = false;
-	float targetX;
-	float targetY;
-	float tTarget = 0.0f;
+	float targetX = 0.0f;
+	float targetY = 0.0f;
+	bool shouldInterpolate = true;
 
 	Place place = Place::deck;
 	bool isSelected = false;
 
-	EntityState state;
-	EntityState statePrev;
+	CardState state{ };
+	CardState statePrev{ };
 
-	Entity(float x, float y);
+	Card();
+	Card(float x, float y);
 
 	void SetPosition(float x, float y);
+	void SetTarget(float x, float y);
+	void SetSelection(bool shouldSelect);
+	void SetPlace(Place place);
+
 	bool CheckPointInBody(float x, float y);
 	bool CheckBodyOnField();
 
-	void SetTarget(float x, float y);
-	void PlaceOnField(float* fieldX, float* fieldY);
+	Place Use();
 
 	void Update(float dt);
 	void Render(float t);
 
-	EntityState Interpolate(float t);
+	CardState Interpolate(float t);
 };
 
 #endif

@@ -36,6 +36,15 @@ bool CheckMouseInput(int button, InputType type, float* mouseX, float* mouseY) {
 	return false;
 }
 
+bool CheckPointInRect(float x, float y, void* rect) {
+	return CheckCollisionPointRec(Vector2{ x, y }, *(Rectangle*)rect);
+}
+
+void RenderDeck(void* deck) {
+	Rectangle deckRect = *(Rectangle*)deck;
+	DrawRectangleRec(deckRect, BROWN);
+}
+
 void BeginGraphics() {
 	BeginDrawing();
 	ClearBackground(RAYWHITE);

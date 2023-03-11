@@ -22,11 +22,20 @@ bool InitializeNetwork() {
 	serverAddr.sin_port = htons(8080);
 	inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr.S_un.S_addr);
 
+	for (int i = 0; i < 64; i++) {
+		sessionId += ((unsigned long long) (rand() % 2)) << i;
+		printf("Session: %llx\n", sessionId);
+	}
+	
 	return true;
 }
 
+uint64_t GetSessionId() {
+	return sessionId;
+}
+
 void SendData(Packet data) {
-	sendto(Socket, (char*) & data, sizeof Packet, 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
+	sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
 }
 
 bool Listen() {
@@ -43,7 +52,7 @@ bool Listen() {
 }
 
 void Receive(Packet* packet) {
-	int recvResult = recvfrom(Socket, data, 8, 0, (SOCKADDR*)&serverAddr, &serverAddrSize);
+	int recvResult = recvfrom(Socket, data, 64, 0, (SOCKADDR*)&serverAddr, &serverAddrSize);
 	if (recvResult == SOCKET_ERROR) {
 		printf("recvfrom() failed: %d\n", WSAGetLastError());
 		return;
