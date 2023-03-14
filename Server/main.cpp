@@ -14,10 +14,11 @@ struct Tick
 };
 
 int main() {
+	srand(time(NULL));
+
 	int networkInitialized = Network::Initialize();
 	if (!networkInitialized) {
 		printf("Network initialization failed.\n");
-		return 1;
 	}
 
 	// NETWORK LOOP
@@ -33,14 +34,21 @@ int main() {
 				if (Network::clients.size() == 2) {
 					isGameReady = true;
 
-					Packet data;
-					data.state = 1;
-					Network::Send(data);
+					Game::Setup();
+
+					
+					sendto(Network::Socket, (char*)&Network::clients[0].id, 8, 0, (SOCKADDR*)&Network::clients[0].addr, sizeof(Network::clients[0].addr));
+					sendto(Network::Socket, (char*)&Network::clients[0].id, 8, 0, (SOCKADDR*)&Network::clients[1].addr, sizeof(Network::clients[1].addr));
 				}
 			}
 		}
 	}
 	
+	Game::Setup();
+
+	Game::SendPlayerData(Game::hostPlayer);
+	Game::SendPlayerData(Game::connectedPlayer);
+
 	// Game Loop vars
 	auto tCurrent = std::chrono::high_resolution_clock::now();
 	auto tPrev = tCurrent;
@@ -52,33 +60,18 @@ int main() {
 		tCurrent = std::chrono::high_resolution_clock::now();
 		float dt = (tCurrent - tPrev).count() / (float) 1E9;
 		tPrev = tCurrent;
-		physicsTick.acc += dt;
 		networkTick.acc += dt;
 
 		if (Network::Listen()) {
 			Packet dataReceived;
 			Client client = Network::Receive(&dataReceived);
-
 			Player& player = Game::GetPlayerByClientId(client.id);
-			player.UpdateCards(dataReceived.cards);
-		}
-
-		if (isGameReady) {
-			while (physicsTick.acc > physicsTick.step) {
-				physicsTick.acc -= physicsTick.step;
-
+			player.phase = dataReceived.phase;
+			for (int i = 0; i < 10; i++) {
+				player.cards[i] = dataReceived.cards[i];
 			}
-		}
-
-		if (networkTick.acc > networkTick.step) {
-			networkTick.acc = 0;
-
-			for (Client& client : Network::clients) {
-				Packet data{};
-				data.id = client.id;
-				data.cards = Game::GetPlayerByClientId(client.id).cards;
-				Network::Send(data);
-			}
+			
+			Game::SendPlayerData(player);
 		}
 	}
 

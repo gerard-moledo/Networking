@@ -1,21 +1,20 @@
 #ifndef GAME_H
 #define GAME_H
 
+#include "Network.hpp"
+#include "Util.hpp"
+
 #include <vector>
-
-enum struct Place { deck, hand, field };
-
-struct CardState
-{
-	Place place;
-};
 
 struct Player
 {
-	uint64_t clientId;
+	uint64_t id;
 
-	std::vector<CardState> cards;
+	Phase phase = Phase::end;
 
+	std::vector<CardState> cards = std::vector<CardState>(10);
+
+	void Setup(Client client);
 	void UpdateCards(std::vector<CardState> cards);
 };
 
@@ -24,6 +23,9 @@ namespace Game {
 	extern Player connectedPlayer;
 
 	Player& GetPlayerByClientId(uint64_t id);
+
+	void Setup();
+	void SendPlayerData(Player player);
 }
 
 #endif

@@ -8,7 +8,7 @@ namespace Network {
 
 	std::vector<Client> clients;
 	int senderAddrSize = sizeof sockaddr_in;
-	char dataBuffer[64];
+	char dataBuffer[256];
 	fd_set readSet;
 }
 
@@ -58,13 +58,13 @@ bool Network::Listen() {
 		printf("select() failed: %d\n", WSAGetLastError());
 		return false;
 	}
-
+	
 	return readSet.fd_count > 0;
 }
 
 Client Network::Receive(Packet* packetData) {
 	sockaddr_in senderAddr;
-	int recvResult = recvfrom(Socket, dataBuffer, 64, 0, (SOCKADDR*)&senderAddr, &senderAddrSize);
+	int recvResult = recvfrom(Socket, dataBuffer, sizeof dataBuffer, 0, (SOCKADDR*)&senderAddr, &senderAddrSize);
 	if (recvResult == SOCKET_ERROR) {
 		printf("recvfrom() failed: %d\n", WSAGetLastError());
 		return Client{};
@@ -75,6 +75,7 @@ Client Network::Receive(Packet* packetData) {
 }
 
 void Network::Send(Packet data) {
-	sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&clients[0].addr, sizeof clients[0].addr);
-	sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&clients[1].addr, sizeof clients[1].addr);
+	for (Client& client : clients) {
+		sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&client.addr, sizeof client.addr);
+	}
 }

@@ -1,19 +1,17 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
+#include "Util.hpp"
+
 enum struct InputType { pressed, held, released };
 
-void InitializeGraphics();
+namespace Graphics {
+	void Initialize();
 
-bool CheckWindowOpen();
-bool CheckKeyInput(char key, InputType type);
-bool CheckMouseInput(int button, InputType type, float* mouseX, float* mouseY);
+	bool CheckWindowOpen();
+	bool CheckKeyInput(char key, InputType type);
 
-bool CheckPointInRect(float x, float y, void* rect);
-
-void RenderDeck(void* deck);
-
-void BeginGraphics();
-void EndGraphics();
-
+	void Begin();
+	void End();
+}
 #endif

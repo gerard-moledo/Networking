@@ -1,7 +1,7 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-#include "Game.hpp"
+#include "Util.hpp"
 
 #include <WinSock2.h>
 #include <ws2tcpip.h>
@@ -11,9 +11,8 @@
 struct Packet
 {
 	uint64_t id;
-
-	int state;
-	std::vector<CardState> cards;
+	Phase phase;
+	CardState cards[10];
 };
 
 struct Client
@@ -28,7 +27,7 @@ namespace Network {
 
 	extern std::vector<Client> clients;
 	extern int senderAddrSize;
-	extern char dataBuffer[64];
+	extern char dataBuffer[256];
 	extern fd_set readSet;
 
 	bool Initialize();

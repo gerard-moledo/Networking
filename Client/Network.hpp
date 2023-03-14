@@ -7,32 +7,33 @@
 #include <WS2tcpip.h>
 
 #include <vector>
-
-static WSADATA wsaData;
-static SOCKET Socket = INVALID_SOCKET;
-
-static sockaddr_in serverAddr;
-static int serverAddrSize = sizeof serverAddr;
-static fd_set readSet;
-
-static char data[64];
-
-static uint64_t sessionId;
+#include <cstdint>
 
 struct Packet
 {
 	uint64_t id;
-
-	int state;
-	std::vector<CardState> cards;
+	Phase phase;
+	CardState cards[10];
 };
 
-bool InitializeNetwork();
+namespace Network {
+	extern WSADATA wsaData;
+	extern SOCKET Socket;
 
-uint64_t GetSessionId();
+	extern sockaddr_in serverAddr;
+	extern int serverAddrSize;
+	extern fd_set readSet;
 
-void SendData(Packet data);
-bool Listen();
-void Receive(Packet* packet);
+	extern char data[256];
+
+	extern uint64_t sessionId;
+
+	bool Initialize();
+	int WaitForClients();
+
+	void SendData(Packet data);
+	bool Listen();
+	void Receive(Packet* packet);
+}
 
 #endif

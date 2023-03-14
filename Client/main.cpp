@@ -1,265 +1,131 @@
 #include "Network.hpp"
 #include "Graphics.hpp"
-#include "Entity.hpp"
+#include "Game.hpp"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <chrono>
 #include <vector>
-#include <algorithm>
 
-struct Collection
-{
-	Card nullCard;
-	std::vector<Card> deck = std::vector<Card>(10);
-	std::vector<Card> hand{};
-	std::vector<Card> field{};
-	bool shouldModify = false;
-
-	std::vector<Card*> MergeContainers(bool iterDeck, bool iterHand, bool iterField) {
-		std::vector<Card*> multiContainer{};
-
-		if (!iterDeck && !iterHand && !iterField) return multiContainer;
-
-		if (iterDeck) 
-			std::for_each(deck.begin(), deck.end(), [&](Card& card) { 
-				multiContainer.emplace_back(&card); 
-			});
-		if (iterHand) 
-			std::for_each(hand.begin(), hand.end(), [&](Card& card) { 
-				multiContainer.emplace_back(&card); 
-			});
-		if (iterField) 
-			std::for_each(field.begin(), field.end(), [&](Card& card) { 
-				multiContainer.emplace_back(&card); 
-			});
-
-		return multiContainer;
-	}
-#define HAND_AND_FIELD(c) c.MergeContainers(false, true, true)
-#define EVERYWHERE(c) c.MergeContainers(true, true, true)
-};
-
-void DrawCard(Collection& collection);
-void PlayCard(Collection& collection, Card*& selectedCard);
-void ReturnCardToHand(Collection& collection, Card*& selectedCard);
-
-void OrderHand(Collection& collection, Card*& selectedCard);
-void OrderField(Collection& collection, Card*& selectedCard);
-
-int main() {
+int main () {
 	srand(time(NULL));
 
-	InitializeGraphics();
+	Graphics::Initialize();
 
-	bool networkInitialized = InitializeNetwork();
+	bool networkInitialized = Network::Initialize();
 	if (!networkInitialized) {
 		printf("Network initialization failed.\n");
 		return 1;
 	}
-
-	struct
-	{
-		float x = 730;
-		float y = 515;
-		float width = 50;
-		float height = 70;
-	} deck;
-
-	Collection collection;
-
-	Card* selectedCard = nullptr;
 	
 	long long tStart = time(NULL);
-	bool isConnected = false;
-	while (!isConnected && CheckWindowOpen()) {
+	int connectionResult = -1;
+	while (connectionResult < 0 && Graphics::CheckWindowOpen()) {
 		if (tStart != time(NULL)) {
 			tStart == time(NULL);
 
-			if (Listen()) {
-				Packet dataReceived;
-				Receive(&dataReceived);
-
-				if (dataReceived.state) {
-					isConnected = true;
-				}
-			}
-			else {
-				SendData(Packet{ GetSessionId() });
-			}
+			connectionResult = Network::WaitForClients();
 		}
-		BeginGraphics();
+
+		Graphics::Begin();
 		
-		EndGraphics();
+		Graphics::End();
 	}
 
-	if (!isConnected) return 2;
+	if (connectionResult <= 0) return connectionResult + 3;
+
+	while (Game::opponentCollection.id == 0 || Game::collection.id == 0) {
+		if (Network::Listen()) {
+			Packet dataReceived;
+			Network::Receive(&dataReceived);
+
+			if (dataReceived.id == Network::sessionId) {
+				Game::collection.id = dataReceived.id;
+			}
+			else {
+				Game::opponentCollection.id = dataReceived.id;
+			}
+
+			float xCardStart = 755;
+			float yCardStart = dataReceived.id == Game::collection.id ? 550 : 50;
+
+			Collection& playerCollection = dataReceived.id == Game::collection.id ? Game::collection : Game::opponentCollection;
+
+			for (CardState& state : dataReceived.cards) {
+				Card newCard = Card(xCardStart, yCardStart, state.id, state.type, state.place);
+
+				playerCollection.cards.emplace_back(newCard);
+			}
+
+			playerCollection.FillContainers();
+		}
+	}
+
+	Game::DrawCard(5);
+	if (connectionResult == 1) {
+		Game::phase = Phase::start;
+	}
 
 	auto updateDuration = std::chrono::steady_clock::duration{};
 	auto tPrev = std::chrono::steady_clock::now();
 	auto tStacked = tPrev;
 	std::chrono::steady_clock::time_point tPassed[2]{};
 	float tInterpolate = 0.0f;
-	while (CheckWindowOpen()) {
+	while (Graphics::CheckWindowOpen()) {
 		auto tCurrent = std::chrono::steady_clock::now();
 		auto dt = tCurrent - tPrev;
 		tPrev = tCurrent;
 		tStacked = tStacked + dt;
 
-		float mouseX, mouseY;
-		if (CheckMouseInput(0, InputType::pressed, &mouseX, &mouseY)) {
-			for (Card*& card : HAND_AND_FIELD(collection)) {
-				if (card->CheckPointInBody(mouseX, mouseY)) {
-					selectedCard = &(*card);
-					selectedCard->isSelected = true;
-					selectedCard->shouldInterpolate = false;
-					break;
-				}
-			}
-		}
-		if (CheckMouseInput(0, InputType::held, &mouseX, &mouseY)) {
-			if (selectedCard) {
-				selectedCard->SetPosition(mouseX, mouseY);
-
-				collection.shouldModify = true;
-				if (selectedCard->CheckBodyOnField() && selectedCard->place == Place::hand) {
-					PlayCard(collection, selectedCard);
-					selectedCard->place = Place::field;
-				}
-				else if (!selectedCard->CheckBodyOnField() && selectedCard->place == Place::field) {
-					ReturnCardToHand(collection, selectedCard);
-					selectedCard->place = Place::hand;
-				}
-			}
-		}
-		if (CheckMouseInput(0, InputType::released, &mouseX, &mouseY)) {
-			if (CheckPointInRect(mouseX, mouseY, &deck)) {
-				DrawCard(collection);
-			}
-			if (selectedCard) {
-				collection.shouldModify = true;
-
-				selectedCard->isSelected = false;
-				selectedCard = nullptr;
-			}
+		if (Game::phase == Phase::start) {
+			Game::StartTurn();
 		}
 
-		if (collection.shouldModify) {
-			OrderHand(collection, selectedCard);
-			OrderField(collection, selectedCard);
-
-			collection.shouldModify = false;
-		}
-
-		for (Card*& card : EVERYWHERE(collection)) {
-			card->Update(dt.count() / (float)1E9);
-		}
+		Game::HandleInput();
 		
-		if (Listen()) {
-			tPassed[1] = tPassed[0];
-			tPassed[0] = std::chrono::steady_clock::now();
-			updateDuration = tPassed[0] - tPassed[1];
+		Game::OrderCards(Game::collection);
+		Game::OrderCards(Game::opponentCollection);
 
+		Game::Update(dt.count() / (float)1E9);
+
+		if (Game::queueMessage) {
+			Game::queueMessage = false;
+			
+			Packet data;
+			data.phase = Game::phase;
+			data.id = Network::sessionId;
+			for (int i = 0; i < Game::collection.cards.size(); i++) {
+				data.cards[i] = Game::collection.cards[i].state;
+			}
+			Network::SendData(data);
+		}
+
+		if (Network::Listen()) {
 			Packet dataReceived;
-			Receive(&dataReceived);
+			Network::Receive(&dataReceived);
+
+			Collection& playerCollection = dataReceived.id == Game::collection.id ? Game::collection : Game::opponentCollection;
+
+			for (CardState& state : dataReceived.cards) {
+				auto itCard = std::find_if(playerCollection.cards.begin(), playerCollection.cards.end(), [&](Card& card) { return card.id == state.id; });
+				if (itCard != playerCollection.cards.end()) 
+					(*itCard).SetState(state);
+			}
+
+			if (dataReceived.id != Network::sessionId && dataReceived.phase == Phase::end) {
+				Game::phase = Phase::start;
+			}
+			if (Game::phase == Phase::end) {
+				Game::phase = Phase::wait;
+			}
+			playerCollection.shouldModify = true;
+			playerCollection.FillContainers();
 		}
 
-
-		float tInterpolate = updateDuration.count() == 0 ? 0 : (float)(tStacked - (tPassed[0])).count() / updateDuration.count();
-		
-		BeginGraphics();
-			RenderDeck(&deck);
-
-			for (Card*& card : HAND_AND_FIELD(collection)) {
-				card->Render(tInterpolate);
-			}
-		EndGraphics();
+		Graphics::Begin();
+			Game::Render(dt.count() / (float) 1E9);
+		Graphics::End();
 	}
+
 	return 0;
-}
-
-void DrawCard(Collection& collection) {
-	if (collection.deck.size() <= 0) return;
-
-	collection.hand.emplace_back(collection.deck[0]);
-	collection.hand.back().place = Place::hand;
-	collection.deck.erase(collection.deck.begin());
-
-	collection.shouldModify = true;
-}
-void PlayCard(Collection& collection, Card*& selectedCard) {
-	if (collection.hand.size() <= 0) return;
-
-	auto& hand = collection.hand;
-	auto& field = collection.field;
-
-	auto itCard = std::find_if(hand.begin(), hand.end(), [](Card card) { return card.isSelected; });
-	if (itCard == hand.end()) {
-		printf("No card found to play.");
-		return;
-	}
-
-	field.emplace_back(*itCard);
-	hand.erase(itCard);
-
-	selectedCard = &field.back();
-}
-void ReturnCardToHand(Collection& collection, Card*& selectedCard) {
-	if (collection.field.size() <= 0) return;
-
-	auto& hand = collection.hand;
-	auto& field = collection.field;
-
-	auto itCard = std::find_if(field.begin(), field.end(), [](Card card) { return card.isSelected; });
-	if (itCard == field.end()) {
-		printf("No card found to return to hand.");
-		return;
-	}
-
-	hand.emplace_back(*itCard);
-	field.erase(itCard);
-
-	selectedCard = &hand.back();
-
-	collection.shouldModify = true;
-}
-
-void OrderHand(Collection& collection, Card*& selectedCard) {
-	std::sort(collection.hand.begin(), collection.hand.end(), [](Card leftCard, Card rightCard) {
-		return leftCard.x < rightCard.x;
-	});
-	
-	auto itCard = std::find_if(collection.hand.begin(), collection.hand.end(), [](Card card) {
-		return card.isSelected;
-	});
-	if (itCard != collection.hand.end()) {
-		selectedCard = &*itCard;
-	}
-
-	for (int i = 0; i < collection.hand.size(); i++) {
-		if (collection.hand[i].isSelected) continue;
-
-		float targetX = 400.0f + (i - (collection.hand.size() - 1) / 2.0f) * 60.0f;
-
-		collection.hand[i].SetTarget(targetX, 550);
-	}
-}
-
-void OrderField(Collection& collection, Card*& selectedCard) {
-	std::sort(collection.field .begin(), collection.field.end(), [](Card leftCard, Card rightCard) {
-		return leftCard.x < rightCard.x;
-	});
-	auto itCard = std::find_if(collection.field.begin(), collection.field.end(), [](Card card) {
-		return card.isSelected;
-	});
-	if (itCard != collection.field.end()) {
-		selectedCard = &*itCard;
-	}
-
-	for (int i = 0; i < collection.field.size(); i++) {
-		if (collection.field[i].isSelected) continue;
-
-		float targetX = 400.0f + (i - (collection.field.size() - 1) / 2.0f) * 80.0f;
-
-		collection.field[i].SetTarget(targetX, 400);
-	}
 }

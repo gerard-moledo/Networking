@@ -1,49 +1,89 @@
 #ifndef ENTITY_H
 #define ENTITY_H
 
-enum struct Place { deck, hand, field };
+#include "Util.hpp"
 
-struct CardState
-{
-	Place place;
-};
+#include <cstdint>
+#include <vector>
 
 class Card
 {
 public:
-	float x = 705;
-	float y = 550;
+	uint16_t id;
+
+	float x = 400.0f;
+	float y = 300.0f;
 	float width = 50;
 	float height = 70;
 
 	bool isTargeting = false;
+	float t = 0.0f;
+	float startX = 0.0f;
+	float startY = 0.0f;
 	float targetX = 0.0f;
 	float targetY = 0.0f;
 	bool shouldInterpolate = true;
 
-	Place place = Place::deck;
-	bool isSelected = false;
+	Place place;
+	Type type;
 
+	bool isSelected = false;
+	bool isFaceUp = false;
+	
 	CardState state{ };
-	CardState statePrev{ };
 
 	Card();
-	Card(float x, float y);
+	Card(uint16_t id, Type type, Place place);
+	Card(float x, float y, uint16_t id, Type type, Place place);
 
 	void SetPosition(float x, float y);
 	void SetTarget(float x, float y);
 	void SetSelection(bool shouldSelect);
+	void SetState(CardState stateNew);
+	void SetType(Type type);
 	void SetPlace(Place place);
 
 	bool CheckPointInBody(float x, float y);
 	bool CheckBodyOnField();
 
-	Place Use();
-
 	void Update(float dt);
-	void Render(float t);
+	void Render();
+};
 
-	CardState Interpolate(float t);
+struct Collection
+{
+	uint64_t id;
+
+	std::vector<Card> cards;
+
+	std::vector<Card*> deck{};
+	std::vector<Card*> hand{};
+	std::vector<Card*> field{};
+	bool shouldModify = false;
+
+	void FillContainers() {
+		deck.clear();
+		hand.clear();
+		field.clear();
+
+		for (Card& card : cards) {
+			if (card.place == Place::deck) deck.emplace_back(&card);
+			if (card.place == Place::hand) hand.emplace_back(&card);
+			if (card.place == Place::field) field.emplace_back(&card);
+		}
+	}
+
+	std::vector<Card*>* FillContainers(Place place) {
+		FillContainers();
+
+		std::vector<Card*>* container = nullptr;
+		if (place == Place::deck)		container = &deck;
+		else if (place == Place::hand)	container = &hand;
+		else if (place == Place::field) container = &field;
+		else return container;
+
+		return container;
+	}
 };
 
 #endif

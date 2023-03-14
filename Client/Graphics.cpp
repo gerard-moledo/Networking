@@ -3,16 +3,17 @@
 #include "raylib.h"
 #include <stdio.h>
 
-void InitializeGraphics() {
-	SetConfigFlags(FLAG_VSYNC_HINT);
+void Graphics::Initialize() {
+	//SetConfigFlags(FLAG_VSYNC_HINT);
+
 	InitWindow(800, 600, "Game");
 }
 
-bool CheckWindowOpen() {
+bool Graphics::CheckWindowOpen() {
 	return !WindowShouldClose();
 }
 
-bool CheckKeyInput(char key, InputType type) {
+bool Graphics::CheckKeyInput(char key, InputType type) {
 	bool (* InputFunc) (int);
 	if (type == InputType::pressed)		  InputFunc = IsKeyPressed;
 	else if (type == InputType::released) InputFunc = IsKeyReleased;
@@ -25,33 +26,15 @@ bool CheckKeyInput(char key, InputType type) {
 	return false;
 }
 
-bool CheckMouseInput(int button, InputType type, float* mouseX, float* mouseY) {
-	if (mouseX) *mouseX = GetMousePosition().x;
-	if (mouseY) *mouseY = GetMousePosition().y;
-
-	if (type == InputType::pressed) return IsMouseButtonPressed(button);
-	if (type == InputType::held) return IsMouseButtonDown(button);
-	if (type == InputType::released) return IsMouseButtonReleased(button);
-	
-	return false;
-}
-
-bool CheckPointInRect(float x, float y, void* rect) {
-	return CheckCollisionPointRec(Vector2{ x, y }, *(Rectangle*)rect);
-}
-
-void RenderDeck(void* deck) {
-	Rectangle deckRect = *(Rectangle*)deck;
-	DrawRectangleRec(deckRect, BROWN);
-}
-
-void BeginGraphics() {
+void Graphics::Begin() {
 	BeginDrawing();
-	ClearBackground(RAYWHITE);
+	ClearBackground(BEIGE);
+	DrawFPS(10, 110);
 
-	DrawRectangle(0, 500, 800, 100, SKYBLUE);
+	DrawRectangle(0, 0, 800, 100, BROWN);
+	DrawRectangle(0, 500, 800, 100, BROWN);
 }
 
-void EndGraphics() {
+void Graphics::End() {
 	EndDrawing();
 }
