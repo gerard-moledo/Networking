@@ -64,6 +64,10 @@ int main () {
 	Game::DrawCard(5);
 	if (connectionResult == 1) {
 		Game::phase = Phase::start;
+		Graphics::MoveWindow(100, 250);
+	}
+	else {
+		Graphics::MoveWindow(1000, 250);
 	}
 
 	auto updateDuration = std::chrono::steady_clock::duration{};

@@ -9,6 +9,8 @@ namespace Graphics {
 	void Initialize();
 
 	bool CheckWindowOpen();
+	void MoveWindow(int x, int y);
+
 	bool CheckKeyInput(char key, InputType type);
 
 	void Begin();

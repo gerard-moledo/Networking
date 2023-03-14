@@ -89,7 +89,8 @@ void Game::Render(float dt) {
 
 	DrawRectangleRec(TURN_BUTTON, GOLD);
 	DrawRectangleLines(720 - 60, 300 - 25, 120, 50, BLACK);
-	DrawText("END TURN", 720 - 60 + 6, 300 - 10, 20, BLACK);
+	DrawText(phase == Phase::wait ? "WAITNING" : "END TURN", 720 - 60 + 6, 300 - 10, 20, BLACK);
+	if (phase == Phase::wait) DrawRectangleRec(TURN_BUTTON, Color{ 200, 200, 200, 120 });
 
 	if (phase == Phase::wait) tint += dt * 110 * 5;
 	else					  tint -= dt * 110 * 5;

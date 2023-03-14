@@ -13,6 +13,12 @@ bool Graphics::CheckWindowOpen() {
 	return !WindowShouldClose();
 }
 
+void Graphics::MoveWindow(int x, int y) {
+	SetWindowPosition(x, y);
+	SetWindowState(FLAG_WINDOW_TOPMOST);
+}
+
+
 bool Graphics::CheckKeyInput(char key, InputType type) {
 	bool (* InputFunc) (int);
 	if (type == InputType::pressed)		  InputFunc = IsKeyPressed;
