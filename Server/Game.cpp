@@ -5,7 +5,7 @@ namespace Game {
 	Player connectedPlayer;
 }
 
-void Player::Setup(Client client) {
+void Player::Setup(Client client, bool isFirst) {
 	id = client.id;
 
 	for (int i = 0; i < cards.size(); i++) {
@@ -13,6 +13,9 @@ void Player::Setup(Client client) {
 		cards[i].place = Place::deck;
 		cards[i].type = (Type)(rand() % 4);
 	}
+
+	if (isFirst) phase = Phase::start;
+	else		 phase = Phase::wait;
 }
 
 void Player::UpdateCards(std::vector<CardState> newStates) {
@@ -27,16 +30,20 @@ Player& Game::GetPlayerByClientId(uint64_t id) {
 }
 
 void Game::Setup() {
-	hostPlayer.Setup(Network::clients[0]);
-	if (Network::clients.size() > 1) connectedPlayer.Setup(Network::clients[1]);
+	hostPlayer.Setup(Network::clients[0], true);
+	if (Network::clients.size() > 1) 
+		connectedPlayer.Setup(Network::clients[1], false);
 }
 
 void Game::SendPlayerData(Player player) {
 	Packet data;
 	data.phase = player.phase;
 	data.id = player.id;
-	for (int i = 0; i < player.cards.size(); i++) {
+	int cardsSize = (int)player.cards.size();
+	for (int i = 0; i < cardsSize; i++) {
 		data.cards[i] = player.cards[i];
 	}
+	data.status = ConnectionStatus::toGame;
+
 	Network::Send(data);
 }

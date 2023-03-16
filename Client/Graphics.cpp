@@ -3,10 +3,19 @@
 #include "raylib.h"
 #include <stdio.h>
 
+#include <string>
+
 void Graphics::Initialize() {
-	//SetConfigFlags(FLAG_VSYNC_HINT);
+	SetConfigFlags(FLAG_VSYNC_HINT);
 
 	InitWindow(800, 600, "Game");
+}
+
+void Graphics::RenderSession(uint64_t sessionId) {
+	DrawText(std::to_string(sessionId).c_str(), 10, 10, 20, BLACK);
+}
+void Graphics::RenderWaiting() {
+	DrawText("Connecting...", 105, 250, 100, WHITE);
 }
 
 bool Graphics::CheckWindowOpen() {
@@ -43,4 +52,8 @@ void Graphics::Begin() {
 
 void Graphics::End() {
 	EndDrawing();
+}
+
+void Graphics::Deinitialize() {
+	CloseWindow();
 }

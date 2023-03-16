@@ -7,6 +7,7 @@ namespace Network {
 	SOCKET Socket = INVALID_SOCKET;
 
 	std::vector<Client> clients;
+	sockaddr_in senderAddr;
 	int senderAddrSize = sizeof sockaddr_in;
 	char dataBuffer[256];
 	fd_set readSet;
@@ -23,7 +24,8 @@ bool Network::Initialize() {
 
 	Socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	RecvAddr.sin_family = AF_INET;
-	RecvAddr.sin_port = htons(8080);
+	RecvAddr.sin_port = htons(3816);
+	printf("port: %d\n", RecvAddr.sin_port);
 	RecvAddr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
 
 	int bindResult = bind(Socket, (SOCKADDR*)&RecvAddr, sizeof(RecvAddr));
@@ -36,17 +38,44 @@ bool Network::Initialize() {
 	return true;
 }
 
-void Network::Deinitialize() {
-	closesocket(Socket);
-	WSACleanup();
+Client Network::CheckForClient() {
+	if (Network::Listen()) {
+		printf("Received!\n");
+		Packet dataReceived;
+		Receive(&dataReceived);
+		
+		uint64_t id = dataReceived.status == ConnectionStatus::none ? dataReceived.id : 0;
+		return Client{ dataReceived.id, ConnectionStatus::toServer, senderAddr };
+	}
+
+	return Client{};
+}
+
+bool Network::AddOrRemoveClient(Client& client) {
+	if (!CheckClientExists(client.id)) {
+		AddClient(client);
+		Send(Packet{ client.id, ConnectionStatus::none });
+		return true;
+	}
+
+	Send(Packet{ client.id, ConnectionStatus::none });
+
+	return false;
 }
 
 bool Network::CheckClientExists(uint64_t id) {
 	return std::find_if(clients.begin(), clients.end(), [&](Client client) { return id == client.id; }) != clients.end();
 }
 
-void Network::AddClient(Client client) {
-	clients.emplace_back(client);
+void Network::AddClient(Client clientToAdd) {
+	clients.emplace_back(clientToAdd);
+}
+
+void Network::RemoveClient(Client clientToRemove) {
+	auto itRemove = std::remove_if(clients.begin(), clients.end(), [&](Client client) { return clientToRemove.id == client.id; });
+	
+	if (itRemove != clients.end())  
+		clients.erase(itRemove);
 }
 
 bool Network::Listen() {
@@ -62,20 +91,27 @@ bool Network::Listen() {
 	return readSet.fd_count > 0;
 }
 
-Client Network::Receive(Packet* packetData) {
-	sockaddr_in senderAddr;
+void Network::Receive(Packet* packetData) {
 	int recvResult = recvfrom(Socket, dataBuffer, sizeof dataBuffer, 0, (SOCKADDR*)&senderAddr, &senderAddrSize);
 	if (recvResult == SOCKET_ERROR) {
 		printf("recvfrom() failed: %d\n", WSAGetLastError());
-		return Client{};
+		*packetData = Packet{};
+		return;
 	}
-
-	*packetData= *(Packet*)dataBuffer;
-	return Client{ packetData->id, senderAddr };
+	*packetData = *(Packet*)dataBuffer;
 }
 
 void Network::Send(Packet data) {
 	for (Client& client : clients) {
-		sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&client.addr, sizeof client.addr);
+		int sendResult = sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&client.addr, sizeof client.addr);
+		if (sendResult == SOCKET_ERROR) {
+			printf("sendto() failed: %d\n", sendResult);
+			return;
+		}
 	}
+}
+
+void Network::Deinitialize() {
+	closesocket(Socket);
+	WSACleanup();
 }

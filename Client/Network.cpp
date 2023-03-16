@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <ws2def.h>
+
+//#define USE_DOMAIN
 
 namespace Network {
 	WSADATA wsaData;
@@ -15,6 +18,8 @@ namespace Network {
 	char data[256];
 
 	uint64_t sessionId;
+
+	float tLastReceived;
 }
 
 bool Network::Initialize() {
@@ -32,49 +37,95 @@ bool Network::Initialize() {
 		return false;
 	}
 
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(8080);
-	inet_pton(AF_INET, "173.2.44.88", &serverAddr.sin_addr.S_un.S_addr);
 
+	ADDRINFOA hints{ };
+	hints.ai_flags = AI_CANONNAME;
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_protocol = IPPROTO_UDP;
+
+#ifdef USE_DOMAIN
+	ADDRINFOA* result;
+	int addrResult = getaddrinfo("cataclysmwar.com", "3816", &hints, &result);
+	if (addrResult != 0) {
+		printf("getaddrinfo() failed: %d", WSAGetLastError());
+		return false;
+	}
+	serverAddr = *(sockaddr_in*)result->ai_addr;
+#else
+	serverAddr.sin_family = AF_INET;
+	serverAddr.sin_port = htons(3816);
+	int ptonResult = inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr.S_un.S_addr);
+	if (ptonResult != 1) {
+		printf("inet_pton() failed: %d\n", ptonResult);
+		if (ptonResult == 1) {
+			printf("Additional error: %d\n", WSAGetLastError());
+		}
+	}
+#endif
 	for (int i = 0; i < 64; i++) {
 		sessionId += ((unsigned long long) (rand() % 2)) << i;
-		printf("Session: %llx\n", sessionId);
 	}
 	
 	return true;
 }
 
-int Network::WaitForClients() {
-	if (Network::Listen()) {
+bool Network::CheckServerConnected() {
+	if (Network::Listen(1000)) {
+		int recvResult = recvfrom(Socket, data, sizeof data, 0, (SOCKADDR*)&serverAddr, &serverAddrSize);
+		if (recvResult == SOCKET_ERROR) {
+			printf("recvfrom() failed: %d\n", WSAGetLastError());
+			return true;
+		}
+		Packet packet = *(Packet*)data;
+		return packet.status == ConnectionStatus::none;
+	}
+
+	printf("Server Send\n");
+	Packet data;
+	data.id = Network::sessionId;
+	data.status = ConnectionStatus::none;
+	Network::Send(data);
+	return false;
+}
+
+bool Network::CheckClientConnected() {
+	if (Network::Listen(1000)) {
 		int recvResult = recvfrom(Socket, data, sizeof data, 0, (SOCKADDR*)&serverAddr, &serverAddrSize);
 		if (recvResult == SOCKET_ERROR) {
 			printf("recvfrom() failed: %d\n", WSAGetLastError());
 			return 0;
 		}
-		uint64_t idHost = *(uint64_t*)data;
-
-		return idHost == sessionId ? 1 : 2;
+		Packet packet = *(Packet*)data;
+		return packet.id != Network::sessionId && packet.status == ConnectionStatus::toServer;
 	}
-
-	Network::SendData(Packet{ Network::sessionId });
-	return -1;
+	
+	printf("Client Send\n");
+	Packet data;
+	data.id = Network::sessionId;
+	data.status = ConnectionStatus::toServer;
+	Network::Send(data);
+	return false;
 }
 
-void Network::SendData(Packet data) {
-	sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
+void Network::Send(Packet data) {
+	int sendResult = sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
+	if (sendResult == SOCKET_ERROR) {
+		printf("sendto() failed %d\n", WSAGetLastError());
+		return;
+	}
 }
 
-bool Network::Listen() {
+bool Network::Listen(int waitTime) {
 	FD_ZERO(&readSet);
 	FD_SET(Socket, &readSet);
-	timeval timeout{ 0, 0 };
+	timeval timeout{ 0, waitTime };
 	int selectResult = select(NULL, &readSet, nullptr, nullptr, &timeout);
 	if (selectResult == SOCKET_ERROR) {
 		printf("select() failed: %d\n", WSAGetLastError());
 		return false;
 	}
 
-	sizeof Packet;
 	return readSet.fd_count > 0;
 }
 
@@ -86,4 +137,14 @@ void Network::Receive(Packet* packet) {
 	}
 
 	*packet = *(Packet*)data;
+}
+
+void Network::Deinitialize() {
+	Packet data;
+	data.id = sessionId;
+	data.status = ConnectionStatus::none;
+	Send(data);
+
+	closesocket(Socket);
+	WSACleanup();
 }

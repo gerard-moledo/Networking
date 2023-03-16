@@ -8,9 +8,13 @@
 
 #include <vector>
 
+enum struct ConnectionStatus : uint8_t { none, toServer, toClient, toGame };
+
 struct Packet
 {
 	uint64_t id;
+	ConnectionStatus status;
+
 	Phase phase;
 	CardState cards[10];
 };
@@ -18,6 +22,8 @@ struct Packet
 struct Client
 {
 	uint64_t id;
+	ConnectionStatus status;
+
 	sockaddr_in addr;
 };
 
@@ -26,6 +32,7 @@ namespace Network {
 	extern SOCKET Socket;
 
 	extern std::vector<Client> clients;
+	extern sockaddr_in senderAddr;
 	extern int senderAddrSize;
 	extern char dataBuffer[256];
 	extern fd_set readSet;
@@ -33,11 +40,15 @@ namespace Network {
 	bool Initialize();
 	void Deinitialize();
 
+	Client CheckForClient();
+	bool AddOrRemoveClient(Client& client);
+
 	bool CheckClientExists(uint64_t id);
 	void AddClient(Client client);
+	void RemoveClient(Client client);
 
 	bool Listen();
-	Client Receive(Packet* packetData);
+	void Receive(Packet* packetData);
 	void Send(Packet data);
 };
 

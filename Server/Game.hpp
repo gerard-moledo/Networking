@@ -10,11 +10,11 @@ struct Player
 {
 	uint64_t id;
 
-	Phase phase = Phase::end;
+	Phase phase;
 
 	std::vector<CardState> cards = std::vector<CardState>(10);
 
-	void Setup(Client client);
+	void Setup(Client client, bool isFirst);
 	void UpdateCards(std::vector<CardState> cards);
 };
 

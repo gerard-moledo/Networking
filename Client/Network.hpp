@@ -9,9 +9,13 @@
 #include <vector>
 #include <cstdint>
 
+enum struct ConnectionStatus : uint8_t { none, toServer, toClient, toGame };
+
 struct Packet
 {
 	uint64_t id;
+	ConnectionStatus status;
+
 	Phase phase;
 	CardState cards[10];
 };
@@ -28,11 +32,16 @@ namespace Network {
 
 	extern uint64_t sessionId;
 
-	bool Initialize();
-	int WaitForClients();
+	extern float tLastReceived;
 
-	void SendData(Packet data);
-	bool Listen();
+	bool Initialize();
+	void Deinitialize();
+
+	bool CheckServerConnected();
+	bool CheckClientConnected();
+
+	void Send(Packet data);
+	bool Listen(int waitTime);
 	void Receive(Packet* packet);
 }
 

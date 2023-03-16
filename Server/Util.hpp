@@ -5,7 +5,7 @@
 
 enum struct Place : unsigned char { deck, hand, field };
 enum struct Type : unsigned char { white, black, green, blue };
-enum struct Phase : unsigned char { draw, play, end };
+enum struct Phase : unsigned char { debug1, start, draw, play, end, wait, debug2};
 
 struct CardState
 {
