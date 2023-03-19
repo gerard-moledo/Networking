@@ -73,7 +73,31 @@ void Game::HandleInput() {
 	}
 }
 
+void Game::Begin(Packet* packet) {
+	Game::DrawCard(5);
+
+	if (packet->id == Game::collection.id && packet->isTurn ||
+		packet->id == Game::opponentCollection.id && !packet->isTurn) 
+	{
+		Game::phase = Phase::start;
+		Graphics::MoveWindow(100, 250);
+	}
+	else {
+		Game::phase = Phase::wait;
+		Graphics::MoveWindow(1000, 250);
+	}
+}
+
 void Game::Update(float dt) {
+	if (Game::phase == Phase::start) {
+		Game::StartTurn();
+	}
+
+	Game::HandleInput();
+
+	Game::OrderCards(Game::collection);
+	Game::OrderCards(Game::opponentCollection);
+
 	for (Card& card : collection.cards) {
 		card.Update(dt);
 	}
@@ -81,6 +105,28 @@ void Game::Update(float dt) {
 	for (Card& card : opponentCollection.cards) {
 		card.Update(dt);
 	}
+
+	if (Game::phase == Phase::end) {
+		Game::phase = Phase::wait;
+	}
+}
+
+void Game::UpdateState(Packet* packet) {
+	if (packet->id == Game::opponentCollection.id && !packet->isTurn && Game::phase == Phase::wait)
+		Game::phase = Phase::start;
+
+	Collection& playerCollection = packet->id == Game::collection.id ? Game::collection : Game::opponentCollection;
+
+	for (CardState& state : packet->cards) {
+		auto itCard = std::find_if(playerCollection.cards.begin(), playerCollection.cards.end(), 
+									[&](Card& card) { return card.id == state.id; });
+		if (itCard != playerCollection.cards.end()) {
+			(*itCard).SetState(state);
+		}
+	}
+
+	playerCollection.shouldModify = true;
+	playerCollection.FillContainers();
 }
 
 void Game::Render(float dt) {

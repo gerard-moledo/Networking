@@ -1,49 +1,51 @@
 #include "Game.hpp"
 
-namespace Game {
-	Player hostPlayer;
-	Player connectedPlayer;
-}
+#include "Network.hpp"
 
-void Player::Setup(Client client, bool isFirst) {
-	id = client.id;
-
-	for (int i = 0; i < cards.size(); i++) {
+Player::Player(uint64_t id) : id(id), isTurn(false) {
+	for (size_t i = 0; i < cards.size(); i++) {
 		cards[i].id = i;
 		cards[i].place = Place::deck;
 		cards[i].type = (Type)(rand() % 4);
 	}
-
-	if (isFirst) phase = Phase::start;
-	else		 phase = Phase::wait;
 }
 
-void Player::UpdateCards(std::vector<CardState> newStates) {
-	cards = newStates;
-}
+void Player::UpdateState(Packet* packet) {
+	if (packet && id == packet->id) {
+		isTurn = packet->isTurn;
 
-Player& Game::GetPlayerByClientId(uint64_t id) {
-	if (id == hostPlayer.id)
-		return hostPlayer;
-	else
-		return connectedPlayer;
-}
-
-void Game::Setup() {
-	hostPlayer.Setup(Network::clients[0], true);
-	if (Network::clients.size() > 1) 
-		connectedPlayer.Setup(Network::clients[1], false);
-}
-
-void Game::SendPlayerData(Player player) {
-	Packet data;
-	data.phase = player.phase;
-	data.id = player.id;
-	int cardsSize = (int)player.cards.size();
-	for (int i = 0; i < cardsSize; i++) {
-		data.cards[i] = player.cards[i];
+		for (size_t i = 0; i < cards.size(); i++) {
+			cards[i] = packet->cards[i];
+		}
 	}
-	data.status = ConnectionStatus::toGame;
+	if (packet && id != packet->id && !packet->isTurn) {
+		isTurn = true;
+	}
+}
 
+void Player::SendState() {
+	Packet data;
+	data.id = id;
+	data.state = ConnectionState::game;
+	for (size_t i = 0; i < cards.size(); i++) {
+		data.cards[i] = cards[i];
+	}
+	data.isTurn = isTurn;
 	Network::Send(data);
+}
+
+Game::Game(uint64_t hostId, uint64_t peerId) : host(Player(hostId)), peer(Player(peerId)) {
+	host.isTurn = true;
+}
+
+void Game::Update(Packet* packet) {
+	host.UpdateState(packet);
+	peer.UpdateState(packet);
+
+	host.SendState();
+	peer.SendState();
+}
+
+bool Game::IsAPlayer(uint64_t id) {
+	return id == host.id || id == peer.id;
 }

@@ -2,23 +2,13 @@
 #define NETWORK_H
 
 #include "Entity.hpp"
+#include "Util.hpp"
 
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
 #include <vector>
 #include <cstdint>
-
-enum struct ConnectionStatus : uint8_t { none, toServer, toClient, toGame };
-
-struct Packet
-{
-	uint64_t id;
-	ConnectionStatus status;
-
-	Phase phase;
-	CardState cards[10];
-};
 
 namespace Network {
 	extern WSADATA wsaData;
@@ -31,18 +21,14 @@ namespace Network {
 	extern char data[256];
 
 	extern uint64_t sessionId;
-
-	extern float tLastReceived;
+	extern ConnectionState state;
 
 	bool Initialize();
 	void Deinitialize();
 
-	bool CheckServerConnected();
-	bool CheckClientConnected();
-
 	void Send(Packet data);
-	bool Listen(int waitTime);
-	void Receive(Packet* packet);
+	bool Listen();
+	Packet* Receive();
 }
 
 #endif

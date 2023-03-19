@@ -1,11 +1,11 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-#include <stdint.h>
+#include <cstdint>
 
-enum struct Place : unsigned char { deck, hand, field };
-enum struct Type : unsigned char { white, black, green, blue };
-enum struct Phase : unsigned char { debug1, start, draw, play, end, wait, debug2};
+enum struct Place : uint8_t { deck, hand, field };
+enum struct Type : uint8_t { white, black, green, blue };
+enum struct Phase : uint8_t { start, draw, play, end, wait };
 
 struct CardState
 {
@@ -15,6 +15,15 @@ struct CardState
 	uint8_t index;
 
 	Type type;
+};
+
+enum struct ConnectionState : uint8_t { none, lobby, game, disconnected };
+
+struct Packet {
+	uint64_t id;
+	ConnectionState state;
+	bool isTurn;
+	CardState cards[10];
 };
 
 #endif

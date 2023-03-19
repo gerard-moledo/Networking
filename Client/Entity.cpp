@@ -20,9 +20,10 @@ Card::Card(uint16_t id, Type type, Place place) : id(id), type(type), place(plac
 	state.place = place;
 }
 
-Card::Card(float x, float y, uint16_t id, Type type, Place place) :
-	x(x), y(y), id(id), type(type), place(place) 
+Card::Card(bool isPlayer, uint16_t id, Type type, Place place) : id(id), type(type), place(place) 
 {
+	x = 755;
+	y = isPlayer ? 550 : 50;
 	state.id = id;
 	state.type = type;
 	state.place = place;

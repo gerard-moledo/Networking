@@ -1,7 +1,6 @@
 #ifndef GAME_H
 #define GAME_H
 
-#include "Network.hpp"
 #include "Util.hpp"
 
 #include <vector>
@@ -10,22 +9,25 @@ struct Player
 {
 	uint64_t id;
 
-	Phase phase;
-
+	bool isTurn;
 	std::vector<CardState> cards = std::vector<CardState>(10);
 
-	void Setup(Client client, bool isFirst);
-	void UpdateCards(std::vector<CardState> cards);
+	Player(uint64_t id);
+
+	void UpdateState(Packet* packet);
+	void SendState();
 };
 
-namespace Game {
-	extern Player hostPlayer;
-	extern Player connectedPlayer;
+class Game {
+public:
+	Player host;
+	Player peer;
 
-	Player& GetPlayerByClientId(uint64_t id);
+	Game(uint64_t hostId, uint64_t peerId);
 
-	void Setup();
-	void SendPlayerData(Player player);
-}
+	void Update(Packet* packet);
+
+	bool IsAPlayer(uint64_t id);
+};
 
 #endif
