@@ -1,16 +1,17 @@
 #include "Network.hpp"
 
-#include <stdio.h>
+#include <cstdio>
 
 namespace Network {
 	WSADATA wsaData;
 	SOCKET Socket = INVALID_SOCKET;
 
-	std::vector<Client> clients;
-	sockaddr_in senderAddr;
-	int senderAddrSize = sizeof sockaddr_in;
+	sockaddr_in senderAddress;
+	int senderAddressSize = sizeof sockaddr_in;
 	char dataBuffer[256];
-	fd_set readSet;
+	
+	std::vector<Client> clients;
+	std::vector<Game> games;
 }
 
 bool Network::Initialize() {
@@ -20,15 +21,14 @@ bool Network::Initialize() {
 		return false;
 	}
 
-	sockaddr_in RecvAddr;
+	Network::Socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-	Socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	sockaddr_in RecvAddr;
 	RecvAddr.sin_family = AF_INET;
 	RecvAddr.sin_port = htons(3816);
-	printf("port: %d\n", RecvAddr.sin_port);
 	RecvAddr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
 
-	int bindResult = bind(Socket, (SOCKADDR*)&RecvAddr, sizeof(RecvAddr));
+	int bindResult = bind(Network::Socket, (SOCKADDR*)&RecvAddr, sizeof(RecvAddr));
 	if (bindResult == SOCKET_ERROR) {
 		printf("bind() failed: %ld\n", WSAGetLastError());
 		WSACleanup();
@@ -38,80 +38,40 @@ bool Network::Initialize() {
 	return true;
 }
 
-Client Network::CheckForClient() {
-	if (Network::Listen()) {
-		printf("Received!\n");
-		Packet dataReceived;
-		Receive(&dataReceived);
-		
-		uint64_t id = dataReceived.status == ConnectionStatus::none ? dataReceived.id : 0;
-		return Client{ dataReceived.id, ConnectionStatus::toServer, senderAddr };
-	}
-
-	return Client{};
-}
-
-bool Network::AddOrRemoveClient(Client& client) {
-	if (!CheckClientExists(client.id)) {
-		AddClient(client);
-		Send(Packet{ client.id, ConnectionStatus::none });
-		return true;
-	}
-
-	Send(Packet{ client.id, ConnectionStatus::none });
-
-	return false;
-}
-
-bool Network::CheckClientExists(uint64_t id) {
-	return std::find_if(clients.begin(), clients.end(), [&](Client client) { return id == client.id; }) != clients.end();
-}
-
-void Network::AddClient(Client clientToAdd) {
-	clients.emplace_back(clientToAdd);
-}
-
-void Network::RemoveClient(Client clientToRemove) {
-	auto itRemove = std::remove_if(clients.begin(), clients.end(), [&](Client client) { return clientToRemove.id == client.id; });
-	
-	if (itRemove != clients.end())  
-		clients.erase(itRemove);
-}
 
 bool Network::Listen() {
-	FD_ZERO(&readSet);
-	FD_SET(Socket, &readSet);
+	fd_set socketSet;
+	FD_ZERO(&socketSet);
+	FD_SET(Network::Socket, &socketSet);
 	timeval timeout{ 0, 0 };
-	int selectResult = select(NULL, &readSet, nullptr, nullptr, &timeout);
+	int selectResult = select(NULL, &socketSet, nullptr, nullptr, &timeout);
 	if (selectResult == SOCKET_ERROR) {
 		printf("select() failed: %d\n", WSAGetLastError());
-		return false;
 	}
-	
-	return readSet.fd_count > 0;
+
+	return socketSet.fd_count > 0;
 }
 
-void Network::Receive(Packet* packetData) {
-	int recvResult = recvfrom(Socket, dataBuffer, sizeof dataBuffer, 0, (SOCKADDR*)&senderAddr, &senderAddrSize);
+Packet* Network::ReceivePacket() {
+	int recvResult = recvfrom(Network::Socket, Network::dataBuffer, BUFFER_SIZE, 0, (SOCKADDR*)&Network::senderAddress, &Network::senderAddressSize);
 	if (recvResult == SOCKET_ERROR) {
 		printf("recvfrom() failed: %d\n", WSAGetLastError());
-		*packetData = Packet{};
-		return;
+		return nullptr;
 	}
-	*packetData = *(Packet*)dataBuffer;
+	
+	 return (Packet*)Network::dataBuffer;
 }
 
 void Network::Send(Packet data) {
-	for (Client& client : clients) {
-		int sendResult = sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&client.addr, sizeof client.addr);
+	for (Client& client : Network::clients) {
+		int sendResult = sendto(Network::Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&client.address, sizeof client.address);
 		if (sendResult == SOCKET_ERROR) {
-			printf("sendto() failed: %d\n", sendResult);
-			return;
+			printf("sendto() failed: %d. Client: %llu, Packet origin: %llu\n", WSAGetLastError(), client.id, data.id);
 		}
 	}
 }
 
 void Network::Deinitialize() {
-	closesocket(Socket);
+	closesocket(Network::Socket);
 	WSACleanup();
 }

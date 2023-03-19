@@ -16,8 +16,11 @@ namespace Game {
 	
 	extern float tint;
 
+	void Begin(Packet* packet);
+
 	void HandleInput();
 	void Update(float dt);
+	void UpdateState(Packet* packet);
 	void Render(float dt);
 
 	void StartTurn();

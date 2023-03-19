@@ -34,7 +34,7 @@ public:
 
 	Card();
 	Card(uint16_t id, Type type, Place place);
-	Card(float x, float y, uint16_t id, Type type, Place place);
+	Card(bool isHost, uint16_t id, Type type, Place place);
 
 	void SetPosition(float x, float y);
 	void SetTarget(float x, float y);

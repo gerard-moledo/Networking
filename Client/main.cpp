@@ -1,6 +1,7 @@
 #include "Network.hpp"
 #include "Graphics.hpp"
 #include "Game.hpp"
+#include "Util.hpp"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,8 +9,12 @@
 #include <vector>
 #include <iostream>
 
-void Setup(bool isFirst);
 void EndProgram();
+
+void PingServer();
+void WaitForGame(Packet* packet);
+void RunGame(Packet* packet, float dt); 
+
 
 int main () {
 	srand(time(NULL));
@@ -25,174 +30,46 @@ int main () {
 
 	printf("%llu\n", Network::sessionId);
 
-	bool isServerConnected = false;
-	bool isClientConnected = false;
-	bool isGameReady = false;
-
-	auto updateDuration = std::chrono::steady_clock::duration{};
+	Tick serverPing = { 0.0f, 1.0f };
+	Tick peerPing = { 0.0f, 5.0f };
 	auto tPrev = std::chrono::steady_clock::now();
-	auto tStacked = tPrev;
-	std::chrono::steady_clock::time_point tPassed[2]{};
-	float tInterpolate = 0.0f;
 	while (Graphics::CheckWindowOpen()) {
 		auto tCurrent = std::chrono::steady_clock::now();
-		auto dt = tCurrent - tPrev;
+		auto dt = (tCurrent - tPrev).count() / (float) 1E9;
 		tPrev = tCurrent;
-		tStacked = tStacked + dt;
+		serverPing.acc += dt;
+		peerPing.acc += dt;
 
-		Network::tLastReceived += dt.count() / (float)1E9;
-
-		if (!isGameReady) {
-			if (!isServerConnected) {
-				isServerConnected = Network::CheckServerConnected();
-			}
-			else {
-				if (!isClientConnected) {
-					isClientConnected = Network::CheckClientConnected();
-				}
-				if (isClientConnected) {
-					if (Network::Listen(0)) {
-						Packet dataReceived;
-						Network::Receive(&dataReceived);
-
-						if (dataReceived.status < ConnectionStatus::toClient) 
-							continue;
-
-						Collection& playerCollection = dataReceived.id == Network::sessionId ? Game::collection : Game::opponentCollection;
-
-						if (dataReceived.id == Network::sessionId) {
-							Game::collection.id = dataReceived.id;
-							Game::phase = dataReceived.phase;
-						}
-						else {
-							Game::opponentCollection.id = dataReceived.id;
-						}
-
-						float xCardStart = 755;
-						float yCardStart = dataReceived.id == Network::sessionId ? 550 : 50;
-
-						for (CardState& state : dataReceived.cards) {
-
-							Card card = Card(xCardStart, yCardStart, state.id, state.type, state.place);
-							playerCollection.cards.emplace_back(card);
-						}
-
-						playerCollection.FillContainers();
-
-						if (Game::opponentCollection.id != 0 && Game::collection.id != 0) {
-							isGameReady = true;
-						}
-
-						Packet data;
-						data.id = Network::sessionId;
-						data.status = ConnectionStatus::toGame;
-						data.phase = Game::phase;
-						int cardsSize = (int)Game::collection.cards.size();
-						for (int i = 0; i < cardsSize; i++) {
-							data.cards[i] = Game::collection.cards[i].state;
-						}
-						Network::Send(data);
-
-						if (isGameReady) {
-							Game::DrawCard(5);
-							if (Game::phase == Phase::start) {
-								Graphics::MoveWindow(100, 250);
-							}
-							else {
-								Graphics::MoveWindow(1000, 250);
-							}
-
-							Packet data;
-							data.id = Network::sessionId;
-							data.status = ConnectionStatus::toGame;
-							data.phase = Game::phase;
-							int cardsSize = (int)Game::collection.cards.size();
-							for (int i = 0; i < cardsSize; i++) {
-								data.cards[i] = Game::collection.cards[i].state;
-							}
-							Network::Send(data);
-						}
-					}
-					else {
-						Packet data;
-						data.id = Network::sessionId;
-						data.status = ConnectionStatus::toClient;
-						Network::Send(data);
-					}
-				}
-			}
-			Graphics::Begin();
-				Graphics::RenderSession(Network::sessionId);
-				Graphics::RenderWaiting();
-			Graphics::End();
-
-			continue;
+		Packet* packet = nullptr;
+		if (Network::Listen()) {
+			packet = Network::Receive();
+			if (packet) peerPing.acc = 0.0f;
 		}
 
-		if (Game::phase == Phase::start) {
-			Game::StartTurn();
+		switch (Network::state) {
+			case ConnectionState::none:
+				if (serverPing.acc >= serverPing.step) {
+					serverPing.acc = 0;
+
+					PingServer();
+				}
+				if (packet && packet->id == Network::sessionId)
+					Network::state = ConnectionState::lobby;
+				break;
+			case ConnectionState::lobby: 
+				WaitForGame(packet); 
+				break;
+			case ConnectionState::game:
+				RunGame(packet, dt);
+				break;
 		}
 
-		Game::HandleInput();
-		
-		Game::OrderCards(Game::collection);
-		Game::OrderCards(Game::opponentCollection);
-		
-		Game::Update(dt.count() / (float)1E9);
-
-		if (Game::queueMessage) {
-			Game::queueMessage = false;
-			
-			Packet data;
-			data.id = Network::sessionId;
-			data.status = ConnectionStatus::toGame;
-			data.phase = Game::phase;
-			int cardsSize = (int) Game::collection.cards.size();
-			for (int i = 0; i < cardsSize; i++) {
-				data.cards[i] = Game::collection.cards[i].state;
-			}
-			Network::Send(data);
-		}
-
-		if (Network::Listen(0)) {
-			Packet dataReceived;
-			Network::Receive(&dataReceived);
-
-			if (!dataReceived.id) {
-				isGameReady = false;
-				isClientConnected = false;
-				Game::collection = Collection();
-				Game::opponentCollection = Collection();
-				continue;
-			}
-
-			if (dataReceived.status == ConnectionStatus::toGame) {
-				Collection& playerCollection = dataReceived.id == Game::collection.id ? Game::collection : Game::opponentCollection;
-
-				for (CardState& state : dataReceived.cards) {
-					auto itCard = std::find_if(playerCollection.cards.begin(), playerCollection.cards.end(), [&](Card& card) { return card.id == state.id; });
-					if (itCard != playerCollection.cards.end())
-						(*itCard).SetState(state);
-				}
-
-				if (dataReceived.id != Network::sessionId && dataReceived.phase == Phase::end) {
-					Game::phase = Phase::start;
-				}
-				if (Game::phase == Phase::end) {
-					Game::phase = Phase::wait;
-				}
-				playerCollection.shouldModify = true;
-				playerCollection.FillContainers();
-
-				Network::tLastReceived = 0.0f;
-			}
-		}
 
 		Graphics::Begin();
-			Game::Render(dt.count() / (float) 1E9);
+			Game::Render(dt);
 			
 			Graphics::RenderSession(Network::sessionId);
-			if (Network::tLastReceived > 5.0f) Graphics::RenderWaiting();
+			if (peerPing.acc >= peerPing.step) Graphics::RenderWaiting();
 		Graphics::End();
 	}
 
@@ -202,6 +79,57 @@ int main () {
 	exit(0);
 }
 
+void PingServer() {
+	Packet data;
+	data.id = Network::sessionId;
+	data.state = ConnectionState::none;
+	Network::Send(data);
+}
+
+void WaitForGame(Packet* packet) {
+	if (packet && packet->state == ConnectionState::game && Network::state != ConnectionState::game) {
+		Collection& playerCollection = packet->id == Network::sessionId ? Game::collection : Game::opponentCollection;
+
+		bool isPlayer = packet->id == Network::sessionId;
+
+		if (isPlayer) Game::collection.id = packet->id;
+		else		  Game::opponentCollection.id = packet->id;
+
+		for (CardState& state : packet->cards) {
+			Card card = Card(isPlayer, state.id, state.type, state.place);
+			playerCollection.cards.emplace_back(card);
+		}
+		playerCollection.FillContainers();
+
+		if (Game::collection.id != 0 && Game::opponentCollection.id != 0) {
+			Network::state = ConnectionState::game;
+
+			Game::Begin(packet);
+		}
+	}
+}
+
+void RunGame(Packet* packet, float dt) {
+	Game::Update(dt);
+
+	if (Game::queueMessage) {
+		Game::queueMessage = false;
+
+		Packet data;
+		data.id = Network::sessionId;
+		data.state = ConnectionState::game;
+		data.isTurn = Game::phase != Phase::wait;
+		for (size_t i = 0; i < Game::collection.cards.size(); i++) {
+			data.cards[i] = Game::collection.cards[i].state;
+		}
+		Network::Send(data);
+	}
+
+	if (!packet || (packet->id != Game::collection.id && packet->id != Game::opponentCollection.id)) return;
+
+	Game::UpdateState(packet);
+}
+
 void EndProgram () {
-	system("pause");
+
 }
