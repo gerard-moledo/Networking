@@ -5,7 +5,7 @@
 #include <iostream>
 #include <ws2def.h>
 
-//#define USE_DOMAIN
+//#define USE_DOMAIN "domain"
 
 namespace Network {
 	WSADATA wsaData;
@@ -45,7 +45,7 @@ bool Network::Initialize() {
 
 #ifdef USE_DOMAIN
 	ADDRINFOA* result;
-	int addrResult = getaddrinfo("cataclysmwar.com", "3816", &hints, &result);
+	int addrResult = getaddrinfo(USE_DOMAIN, "3816", &hints, &result);
 	if (addrResult != 0) {
 		printf("getaddrinfo() failed: %d", WSAGetLastError());
 		return false;
@@ -103,7 +103,7 @@ Packet* Network::Receive() {
 void Network::Deinitialize() {
 	Packet data;
 	data.id = sessionId;
-	data.state = ConnectionState::none;
+	data.state = ConnectionState::disconnected;
 	Send(data);
 
 	closesocket(Socket);

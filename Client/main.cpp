@@ -15,7 +15,6 @@ void PingServer();
 void WaitForGame(Packet* packet);
 void RunGame(Packet* packet, float dt); 
 
-
 int main () {
 	srand(time(NULL));
 	atexit(EndProgram);
@@ -43,16 +42,17 @@ int main () {
 		Packet* packet = nullptr;
 		if (Network::Listen()) {
 			packet = Network::Receive();
-			if (packet) peerPing.acc = 0.0f;
+			peerPing.acc = 0.0f;
+		}
+
+		if (serverPing.acc >= serverPing.step) {
+			serverPing.acc = 0.0f;
+
+			PingServer();
 		}
 
 		switch (Network::state) {
 			case ConnectionState::none:
-				if (serverPing.acc >= serverPing.step) {
-					serverPing.acc = 0;
-
-					PingServer();
-				}
 				if (packet && packet->id == Network::sessionId)
 					Network::state = ConnectionState::lobby;
 				break;
@@ -69,7 +69,8 @@ int main () {
 			Game::Render(dt);
 			
 			Graphics::RenderSession(Network::sessionId);
-			if (peerPing.acc >= peerPing.step) Graphics::RenderWaiting();
+			if (peerPing.acc >= peerPing.step)
+				Graphics::RenderWaiting();
 		Graphics::End();
 	}
 
@@ -82,7 +83,11 @@ int main () {
 void PingServer() {
 	Packet data;
 	data.id = Network::sessionId;
-	data.state = ConnectionState::none;
+	data.state = Network::state;
+	data.isTurn = Game::phase != Phase::wait;
+	for (size_t i = 0; i < Game::collection.cards.size(); i++) {
+		data.cards[i] = Game::collection.cards[i].state;
+	}
 	Network::Send(data);
 }
 
@@ -131,5 +136,5 @@ void RunGame(Packet* packet, float dt) {
 }
 
 void EndProgram () {
-
+	Network::Deinitialize();
 }

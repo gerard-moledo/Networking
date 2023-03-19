@@ -205,7 +205,7 @@ void Game::OrderCards(Collection& playerCollection) {
 }
 
 void Game::Order(Collection& playerCollection, Place place) {
-	std::vector<Card*>& container = *playerCollection.FillContainers(place);
+	std::vector<Card*>* container = playerCollection.FillContainers(place);
 
 	float gap = 0.0f, level = 0.0f;
 	if (place == Place::hand) {
@@ -225,19 +225,21 @@ void Game::Order(Collection& playerCollection, Place place) {
 		Sorter = [](Card* first, Card* next) { return first->state.index < next->state.index; };
 	}
 
-	std::sort(container.begin(), container.end(), Sorter);
+	if (!container) return;
 
-	for (int i = 0; i < container.size(); i++) {
-		Card& card = *container[i];
+	std::sort(container->begin(), container->end(), Sorter);
+
+	for (size_t i = 0; i < container->size(); i++) {
+		Card& card = *(*container)[i];
 		if (card.isSelected) continue;
 
 		card.state.index = i;
 
 		if (playerCollection.id != collection.id)
 			if (place == Place::field) card.isFaceUp = true;
-			else					  card.isFaceUp = false;
+			else					   card.isFaceUp = false;
 
-		float targetX = 400.0f + (i - (container.size() - 1) / 2.0f) * gap;
+		float targetX = 400.0f + (i - (container->size() - 1) / 2.0f) * gap;
 		card.SetTarget(targetX, level);
 	}
 }

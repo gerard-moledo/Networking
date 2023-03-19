@@ -36,9 +36,12 @@ int main() {
 			}
 		}
 		if (packet && packet->state == ConnectionState::disconnected) {
-			Network::clients.erase(std::remove_if(Network::clients.begin(), Network::clients.end(), 
-												   [&](Client& client) { return client.id == packet->id; }), 
-												  Network::clients.end());
+			auto itClient = std::remove_if(Network::clients.begin(), Network::clients.end(),
+														[&](Client& client) { return client.id == packet->id; });
+			auto itGame = std::remove_if(Network::games.begin(), Network::games.end(),
+											[&](Game& game) { return game.IsAPlayer(itClient->id); });
+			Network::clients.erase(itClient, Network::clients.end());
+			Network::games.erase(itGame, Network::games.end());
 		}
 
 		Lobby::Update(packet);

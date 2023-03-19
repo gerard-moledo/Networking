@@ -77,10 +77,9 @@ struct Collection
 		FillContainers();
 
 		std::vector<Card*>* container = nullptr;
-		if (place == Place::deck)		container = &deck;
-		else if (place == Place::hand)	container = &hand;
-		else if (place == Place::field) container = &field;
-		else return container;
+		if (place == Place::deck)  container = &deck;
+		if (place == Place::hand)  container = &hand;
+		if (place == Place::field) container = &field;
 
 		return container;
 	}

@@ -6,9 +6,8 @@
 #include <string>
 
 void Graphics::Initialize() {
-	//SetConfigFlags(FLAG_VSYNC_HINT);
+	SetConfigFlags(FLAG_VSYNC_HINT);
 	InitWindow(800, 600, "Game");
-	SetTargetFPS(60);
 }
 
 void Graphics::RenderSession(uint64_t sessionId) {
