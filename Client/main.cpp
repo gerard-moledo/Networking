@@ -1,3 +1,5 @@
+#define SUPPORT_IMAGE_GENERATION
+
 #include "Network.hpp"
 #include "Graphics.hpp"
 #include "Game.hpp"
@@ -81,32 +83,31 @@ int main () {
 }
 
 void PingServer() {
-	Packet data;
+	Packet data{};
 	data.id = Network::sessionId;
 	data.state = Network::state;
 	data.isTurn = Game::phase != Phase::wait;
-	for (size_t i = 0; i < Game::collection.cards.size(); i++) {
-		data.cards[i] = Game::collection.cards[i].state;
+	for (size_t i = 0; i < Game::host.cards.size(); i++) {
+		data.cards[i] = Game::host.cards[i].state;
 	}
 	Network::Send(data);
 }
 
 void WaitForGame(Packet* packet) {
-	if (packet && packet->state == ConnectionState::game && Network::state != ConnectionState::game) {
-		Collection& playerCollection = packet->id == Network::sessionId ? Game::collection : Game::opponentCollection;
+	if (packet && packet->state == ConnectionState::game ) {
+		bool isHost = packet->id == Network::sessionId;
 
-		bool isPlayer = packet->id == Network::sessionId;
+		Player& player = isHost ? Game::host : Game::peer;
 
-		if (isPlayer) Game::collection.id = packet->id;
-		else		  Game::opponentCollection.id = packet->id;
+		if (isHost)   Game::host.id = packet->id;
+		else		  Game::peer.id = packet->id;
 
 		for (CardState& state : packet->cards) {
-			Card card = Card(isPlayer, state.id, state.type, state.place);
-			playerCollection.cards.emplace_back(card);
+			Card card = Card(isHost, state.id, state.type, state.place);
+			player.cards.emplace_back(card);
 		}
-		playerCollection.FillContainers();
 
-		if (Game::collection.id != 0 && Game::opponentCollection.id != 0) {
+		if (Game::host.id != 0 && Game::peer.id != 0) {
 			Network::state = ConnectionState::game;
 
 			Game::Begin(packet);
@@ -120,19 +121,17 @@ void RunGame(Packet* packet, float dt) {
 	if (Game::queueMessage) {
 		Game::queueMessage = false;
 
-		Packet data;
+		Packet data{};
 		data.id = Network::sessionId;
 		data.state = ConnectionState::game;
 		data.isTurn = Game::phase != Phase::wait;
-		for (size_t i = 0; i < Game::collection.cards.size(); i++) {
-			data.cards[i] = Game::collection.cards[i].state;
+		for (size_t i = 0; i < Game::host.cards.size(); i++) {
+			data.cards[i] = Game::host.cards[i].state;
 		}
 		Network::Send(data);
 	}
 
-	if (!packet || (packet->id != Game::collection.id && packet->id != Game::opponentCollection.id)) return;
-
-	Game::UpdateState(packet);
+	if (packet) Game::UpdateState(packet);
 }
 
 void EndProgram () {

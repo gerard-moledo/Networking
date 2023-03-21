@@ -2,13 +2,10 @@
 #define GAME_H
 
 #include "Entity.hpp"
-#include "Graphics.hpp"
 
 namespace Game {
-	extern Collection collection;
-	extern Collection opponentCollection;
-
-	extern Card* selectedCard;
+	extern Player host;
+	extern Player peer;
 
 	extern bool queueMessage;
 
@@ -27,8 +24,8 @@ namespace Game {
 	void EndTurn();
 	void DrawCard(int amount);
 
-	void OrderCards(Collection& playerCollection);
-	void Order(Collection& playerCollection, Place place);
+	void OrderCards(Player& player);
+	void Order(Player& player, Place place);
 }
 
 #endif

@@ -11,6 +11,7 @@ struct CardState
 {
 	uint16_t id;
 
+	bool isSelected;
 	Place place;
 	uint8_t index;
 

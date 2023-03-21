@@ -1,6 +1,8 @@
 #include "Graphics.hpp"
 
 #include "Entity.hpp"
+#include "Graphics.hpp"
+
 #include "raylib.h"
 
 #include <stdio.h>
@@ -45,6 +47,8 @@ void Card::SetTarget(float tx, float ty) {
 
 void Card::SetSelection(bool shouldSelect) {
 	isSelected = shouldSelect;
+	state.isSelected = shouldSelect;
+
 	isTargeting = false;
 }
 
@@ -56,6 +60,7 @@ void Card::SetType(Type typeNew) {
 void Card::SetPlace(Place placeNew) {
 	place = placeNew;
 	state.place = place;
+
 	isFaceUp = place != Place::deck;
 }
 
@@ -63,8 +68,9 @@ void Card::SetState(CardState stateNew) {
 	state = stateNew;
 	
 	id = state.id;
-	type = state.type;
+	isSelected = state.isSelected;
 	place = state.place;
+	type = state.type;
 }
 
 bool Card::CheckPointInBody(float pointX, float pointY) {
@@ -92,7 +98,7 @@ void Card::Update(float dt) {
 	}
 }
 
-void Card::Render() {
+void Card::Render(bool isHighlighted) {
 	Color color = GRAY;
 	if (type == Type::white) color = WHITE;
 	if (type == Type::black) color = DARKGRAY;
@@ -100,6 +106,8 @@ void Card::Render() {
 	if (type == Type::blue)  color = BLUE;
 	if (!isFaceUp) color = DARKBROWN;
 
+	if (isHighlighted) 
+		DrawRectangleGradientEx(Rectangle{ x - width / 2 - 4, y - height / 2 - 4, 58, 78 }, MAGENTA, YELLOW, MAGENTA, YELLOW);
 	DrawRectangleV(Vector2{ x - width / 2, y - height / 2 }, Vector2{ width, height }, color);
 	DrawRectangleLinesEx(Rectangle{ x - width / 2, y - height / 2, width, height }, 2.0f, BLACK);
 }

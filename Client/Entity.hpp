@@ -47,10 +47,10 @@ public:
 	bool CheckBodyOnField();
 
 	void Update(float dt);
-	void Render();
+	void Render(bool isHighlighted);
 };
 
-struct Collection
+struct Player
 {
 	uint64_t id;
 
@@ -59,7 +59,7 @@ struct Collection
 	std::vector<Card*> deck{};
 	std::vector<Card*> hand{};
 	std::vector<Card*> field{};
-	bool shouldModify = false;
+	bool shouldOrderCards = false;
 
 	void FillContainers() {
 		deck.clear();
@@ -73,13 +73,13 @@ struct Collection
 		}
 	}
 
-	std::vector<Card*>* FillContainers(Place place) {
+	std::vector<Card*> FillContainers(Place place) {
 		FillContainers();
 
-		std::vector<Card*>* container = nullptr;
-		if (place == Place::deck)  container = &deck;
-		if (place == Place::hand)  container = &hand;
-		if (place == Place::field) container = &field;
+		std::vector<Card*> container;
+		if (place == Place::deck)  container = deck;
+		if (place == Place::hand)  container = hand;
+		if (place == Place::field) container = field;
 
 		return container;
 	}

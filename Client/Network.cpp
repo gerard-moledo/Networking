@@ -63,7 +63,7 @@ bool Network::Initialize() {
 	}
 #endif
 	for (int i = 0; i < 64; i++) {
-		sessionId += ((unsigned long long) (rand() % 2)) << i;
+		sessionId += ((uint64_t) (rand() % 2)) << i;
 	}
 	
 	return true;

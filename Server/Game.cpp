@@ -5,6 +5,7 @@
 Player::Player(uint64_t id) : id(id), isTurn(false) {
 	for (size_t i = 0; i < cards.size(); i++) {
 		cards[i].id = i;
+		cards[i].isSelected = false;
 		cards[i].place = Place::deck;
 		cards[i].type = (Type)(rand() % 4);
 	}
@@ -24,17 +25,17 @@ void Player::UpdateState(Packet* packet) {
 }
 
 void Player::SendState() {
-	Packet data;
+	Packet data{};
 	data.id = id;
 	data.state = ConnectionState::game;
+	data.isTurn = isTurn;
 	for (size_t i = 0; i < cards.size(); i++) {
 		data.cards[i] = cards[i];
 	}
-	data.isTurn = isTurn;
-	Network::Send(data);
+	Network::sendQueue.emplace_back(data);
 }
 
-Game::Game(uint64_t hostId, uint64_t peerId) : host(Player(hostId)), peer(Player(peerId)) {
+Game::Game(uint32_t id, uint64_t hostId, uint64_t peerId) : id(id), host(Player(hostId)), peer(Player(peerId)) {
 	host.isTurn = true;
 }
 

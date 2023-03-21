@@ -1,4 +1,6 @@
 #include "Game.hpp"
+#include "Graphics.hpp"
+
 #include "raylib.h"
 
 #include <algorithm>
@@ -9,8 +11,8 @@
 #define TINT(t) Color { 100, 100, 140, t }
 
 namespace Game {
-	Collection collection;
-	Collection opponentCollection;
+	Player host;
+	Player peer;
 
 	Card* selectedCard = nullptr;
 	bool queueMessage = false;
@@ -23,13 +25,18 @@ void Game::HandleInput() {
 	float mouseX = GetMousePosition().x;
 	float mouseY = GetMousePosition().y;
 
+	Card* selectedCard = nullptr;
+	auto itCard = std::find_if(host.cards.begin(), host.cards.end(), [&](Card& card) { return card.isSelected; });
+	if (itCard != host.cards.end()) selectedCard = &*itCard;
+
 	if (IsMouseButtonPressed(0)) {
-		for (Card& card : collection.cards) {
+		for (Card& card : host.cards) {
 			if (card.place == Place::deck) continue;
 
 			if (card.CheckPointInBody(mouseX, mouseY)) {
 				selectedCard = &card;
 				selectedCard->SetSelection(true);
+				queueMessage = true;
 				break;
 			}
 		}
@@ -42,11 +49,11 @@ void Game::HandleInput() {
 				if (selectedCard->CheckBodyOnField() && selectedCard->place == Place::hand) {
 					selectedCard->SetPlace(Place::field);
 				}
-				else if (!selectedCard->CheckBodyOnField() && selectedCard->place == Place::field) {
+				if (!selectedCard->CheckBodyOnField() && selectedCard->place == Place::field) {
 					selectedCard->SetPlace(Place::hand);
 				}
 			}
-			else {
+			if (phase == Phase::wait) {
 				if (selectedCard->place == Place::hand && selectedCard->y < 500) {
 					selectedCard->SetPosition(selectedCard->x, 500);
 				}				
@@ -54,8 +61,7 @@ void Game::HandleInput() {
 					selectedCard->SetPosition(selectedCard->x, 500);
 				}
 			}
-
-			collection.shouldModify = true;
+			host.shouldOrderCards = true;
 		}
 	}
 	if (IsMouseButtonReleased(0)) {
@@ -63,10 +69,9 @@ void Game::HandleInput() {
 			EndTurn();
 		}
 		if (selectedCard) {
-			collection.shouldModify = true;
+			host.shouldOrderCards = true;
 
-			selectedCard->isSelected = false;
-			selectedCard = nullptr;
+			selectedCard->SetSelection(false);
 
 			queueMessage = true;
 		}
@@ -74,59 +79,61 @@ void Game::HandleInput() {
 }
 
 void Game::Begin(Packet* packet) {
-	Game::DrawCard(5);
+	DrawCard(5);
 
-	if (packet->id == Game::collection.id && packet->isTurn ||
-		packet->id == Game::opponentCollection.id && !packet->isTurn) 
+	if (packet->id == host.id && packet->isTurn ||
+		packet->id == peer.id && !packet->isTurn) 
 	{
-		Game::phase = Phase::start;
+		phase = Phase::start;
 		Graphics::MoveWindow(100, 250);
 	}
 	else {
-		Game::phase = Phase::wait;
+		phase = Phase::wait;
 		Graphics::MoveWindow(1000, 250);
 	}
 }
 
 void Game::Update(float dt) {
-	if (Game::phase == Phase::start) {
-		Game::StartTurn();
+	if (phase == Phase::start) {
+		StartTurn();
 	}
 
-	Game::HandleInput();
+	HandleInput();
 
-	Game::OrderCards(Game::collection);
-	Game::OrderCards(Game::opponentCollection);
+	OrderCards(host);
+	OrderCards(peer);
 
-	for (Card& card : collection.cards) {
+	for (Card& card : host.cards) {
 		card.Update(dt);
 	}
 
-	for (Card& card : opponentCollection.cards) {
+	for (Card& card : peer.cards) {
 		card.Update(dt);
 	}
 
-	if (Game::phase == Phase::end) {
-		Game::phase = Phase::wait;
+	if (phase == Phase::end) {
+		phase = Phase::wait;
 	}
 }
 
 void Game::UpdateState(Packet* packet) {
-	if (packet->id == Game::opponentCollection.id && !packet->isTurn && Game::phase == Phase::wait)
-		Game::phase = Phase::start;
+	if (packet->id == peer.id && !packet->isTurn && phase == Phase::wait)
+		phase = Phase::start;
 
-	Collection& playerCollection = packet->id == Game::collection.id ? Game::collection : Game::opponentCollection;
+	Player& player = packet->id == host.id ? host : peer;
 
 	for (CardState& state : packet->cards) {
-		auto itCard = std::find_if(playerCollection.cards.begin(), playerCollection.cards.end(), 
-									[&](Card& card) { return card.id == state.id; });
-		if (itCard != playerCollection.cards.end()) {
-			(*itCard).SetState(state);
+		auto itCard = std::find_if(player.cards.begin(), player.cards.end(), [&](Card& card) { return card.id == state.id; });
+		if (itCard != player.cards.end()) {
+			itCard->SetState(state);
+
+			if (player.id == peer.id) {
+				itCard->isFaceUp = state.place == Place::field && !state.isSelected;
+			}
 		}
 	}
 
-	playerCollection.shouldModify = true;
-	playerCollection.FillContainers();
+	if (player.id == peer.id) player.shouldOrderCards = true;
 }
 
 void Game::Render(float dt) {
@@ -154,16 +161,19 @@ void Game::Render(float dt) {
 
 	DrawRectangle(0, 0, 800, 100, TINT((unsigned char) (110.0f - tint)));
 
-	for (Card& card : opponentCollection.cards) {
-		card.Render();
+	Card* selectedCard = nullptr;
+	for (Card& card : peer.cards) {
+		if (card.isSelected) selectedCard = &card;
+		else card.Render(false);
 	}
+	if (selectedCard)
+		selectedCard->Render(true);
 
-	for (Card& card : collection.cards) {
-		if (card.isSelected) continue;
-		card.Render();
+	for (Card& card : host.cards) {
+		if (card.isSelected) selectedCard = &card;
+		else card.Render(false);
 	}
-	if (selectedCard) 
-		selectedCard->Render();
+	if (selectedCard) selectedCard->Render(true);
 }
 
 void Game::StartTurn() {
@@ -181,65 +191,61 @@ void Game::DrawCard(int amount) {
 	int count = 0;
 	int index = 0;
 	while (count < amount) {
-		if (index >= collection.deck.size()) break;
+		if (index >= host.cards.size()) break;
 
-		if (collection.deck[index]->place == Place::deck) {
-			collection.deck[index]->SetPlace(Place::hand);
+		if (host.cards[index].place == Place::deck) {
+			host.cards[index].SetPlace(Place::hand);
 			count++;
 		}
 
 		index++;
 	}
 
-	collection.shouldModify = true;
+	host.shouldOrderCards = true;
 	queueMessage = true;
 }
 
-void Game::OrderCards(Collection& playerCollection) {
-	if (playerCollection.shouldModify) {
-		Order(playerCollection, Place::hand);
-		Order(playerCollection, Place::field);
+void Game::OrderCards(Player& player) {
+	if (player.shouldOrderCards) {
+		player.shouldOrderCards = false;
 
-		playerCollection.shouldModify = false;
+		Order(player, Place::hand);
+		Order(player, Place::field);
 	}
 }
 
-void Game::Order(Collection& playerCollection, Place place) {
-	std::vector<Card*>* container = playerCollection.FillContainers(place);
-
+void Game::Order(Player& player, Place place) {
 	float gap = 0.0f, level = 0.0f;
 	if (place == Place::hand) {
 		gap = 52.0f; 
-		level = playerCollection.id == collection.id ? 550.0f : 50.0f;
+		level = player.id == host.id ? 550.0f : 50.0f;
 	};
 	if (place == Place::field) {
 		gap = 70.0f; 
-		level = playerCollection.id == collection.id ? 400.0f : 200.0f; 
+		level = player.id == host.id ? 400.0f : 200.0f; 
 	};
 
+	std::vector<Card*> container = player.FillContainers(place);
 	bool (*Sorter) (Card* first, Card* second);
-	if (playerCollection.id == collection.id) {
+	if (player.id == host.id) {
 		Sorter = [](Card* leftCard, Card* rightCard) { return leftCard->x < rightCard->x; };
 	}
 	else {
 		Sorter = [](Card* first, Card* next) { return first->state.index < next->state.index; };
 	}
 
-	if (!container) return;
+	std::sort(container.begin(), container.end(), Sorter);
 
-	std::sort(container->begin(), container->end(), Sorter);
+	for (size_t i = 0; i < container.size(); i++) {
+		Card& card = *container[i];
 
-	for (size_t i = 0; i < container->size(); i++) {
-		Card& card = *(*container)[i];
-		if (card.isSelected) continue;
-
+		if (card.state.index != i)
+			queueMessage = true;
 		card.state.index = i;
 
-		if (playerCollection.id != collection.id)
-			if (place == Place::field) card.isFaceUp = true;
-			else					   card.isFaceUp = false;
+		if (player.id == host.id && card.isSelected) continue;
 
-		float targetX = 400.0f + (i - (container->size() - 1) / 2.0f) * gap;
+		float targetX = 400.0f + (i - (container.size() - 1) / 2.0f) * gap;
 		card.SetTarget(targetX, level);
 	}
 }

@@ -20,10 +20,12 @@ struct Player
 
 class Game {
 public:
+	uint32_t id;
+
 	Player host;
 	Player peer;
 
-	Game(uint64_t hostId, uint64_t peerId);
+	Game(uint32_t id, uint64_t hostId, uint64_t peerId);
 
 	void Update(Packet* packet);
 

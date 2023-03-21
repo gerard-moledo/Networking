@@ -4,11 +4,13 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <ctime>
 #include <algorithm>
 
 void Exit();
 
 int main() {
+	srand(time(NULL));
 	atexit(Exit);
 
 	bool isNetworkInitialized = Network::Initialize();
@@ -29,10 +31,10 @@ int main() {
 			if (itFoundClient == Network::clients.end()) {
 				Lobby::AddClient(packet->id);
 
-				Packet data;
+				Packet data{};
 				data.id = packet->id;
 				data.state = ConnectionState::lobby;
-				Network::Send(data);
+				Network::Send(data, Network::clients.back());
 			}
 		}
 		if (packet && packet->state == ConnectionState::disconnected) {
@@ -48,9 +50,20 @@ int main() {
 
 		for (Game& game : Network::games) {
 			bool shouldUpdateState = packet && packet->state == ConnectionState::game && game.IsAPlayer(packet->id);
-			if (shouldUpdateState)
+			if (shouldUpdateState) {
 				game.Update(packet);
+			}
+			for (auto it = Network::sendQueue.begin(); it != Network::sendQueue.end();) {
+				if (game.IsAPlayer(it->id)) {
+					Network::SendToGame(*it, game);
+					it = Network::sendQueue.erase(it);
+					continue;
+				}
+				it++;
+			}
 		}
+
+
 	}
 
 	exit(0);

@@ -28,11 +28,14 @@ namespace Network {
 	extern std::vector<Client> clients;
 	extern std::vector<Game> games;
 
+	extern std::vector<Packet> sendQueue;
+
 	bool Initialize();
 
 	bool Listen();
 	Packet* ReceivePacket();
-	void Send(Packet data);
+	void SendToGame(Packet data, Game game);
+	void Send(Packet data, Client client);
 
 	void Deinitialize();
 }

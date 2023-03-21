@@ -34,8 +34,12 @@ void Lobby::Update(Packet* packet) {
 void Lobby::CreateGame(Client& host, Client& peer) {
 	host.state = ConnectionState::game;
 	peer.state = ConnectionState::game;
-
-	Game newGame = Game(host.id, peer.id);
+	
+	uint32_t gameId = 0;
+	for (int i = 0; i < 32; i++) {
+		gameId += ((uint32_t) (rand() % 2)) << i;
+	}
+	Game newGame = Game(rand(), host.id, peer.id);
 	newGame.Update(nullptr);
 	Network::games.emplace_back(newGame);
 }

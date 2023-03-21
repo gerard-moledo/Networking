@@ -8,10 +8,12 @@ namespace Network {
 
 	sockaddr_in senderAddress;
 	int senderAddressSize = sizeof sockaddr_in;
-	char dataBuffer[256];
+	char dataBuffer[BUFFER_SIZE];
 	
 	std::vector<Client> clients;
 	std::vector<Game> games;
+
+	std::vector<Packet> sendQueue;
 }
 
 bool Network::Initialize() {
@@ -62,12 +64,25 @@ Packet* Network::ReceivePacket() {
 	 return (Packet*)Network::dataBuffer;
 }
 
-void Network::Send(Packet data) {
-	for (Client& client : Network::clients) {
-		int sendResult = sendto(Network::Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&client.address, sizeof client.address);
-		if (sendResult == SOCKET_ERROR) {
-			printf("sendto() failed: %d. Client: %llu, Packet origin: %llu\n", WSAGetLastError(), client.id, data.id);
+void Network::SendToGame(Packet data, Game currentGame) {
+	for (Game& game : Network::games) {
+		if (game.id == currentGame.id) {
+			auto itHost = std::find_if(Network::clients.begin(), Network::clients.end(),
+									[&](Client& client) { return client.id == game.host.id; });
+			auto itPeer = std::find_if(Network::clients.begin(), Network::clients.end(),
+									[&](Client& client) { return client.id == game.peer.id; });
+			if (itHost != Network::clients.end())
+				Network::Send(data, *itHost);
+			if (itPeer != Network::clients.end())
+				Network::Send(data, *itPeer);
 		}
+	}
+}
+
+void Network::Send(Packet data, Client client) {
+	int sendResult = sendto(Network::Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&client.address, sizeof client.address);
+	if (sendResult == SOCKET_ERROR) {
+		printf("sendto() failed: %d. Client: %llu, Packet origin: %llu\n", WSAGetLastError(), client.id, data.id);
 	}
 }
 
