@@ -27,6 +27,7 @@ public:
 	Place place;
 	Type type;
 
+	bool isHighlighted = false;
 	bool isSelected = false;
 	bool isFaceUp = false;
 	
@@ -47,7 +48,7 @@ public:
 	bool CheckBodyOnField();
 
 	void Update(float dt);
-	void Render(bool isHighlighted);
+	void Render();
 };
 
 struct Player

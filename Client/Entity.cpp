@@ -46,10 +46,11 @@ void Card::SetTarget(float tx, float ty) {
 }
 
 void Card::SetSelection(bool shouldSelect) {
+	if (!(isHighlighted && !isSelected)) {
+		isHighlighted = shouldSelect;
+	}
 	isSelected = shouldSelect;
 	state.isSelected = shouldSelect;
-
-	isTargeting = false;
 }
 
 void Card::SetType(Type typeNew) {
@@ -65,12 +66,11 @@ void Card::SetPlace(Place placeNew) {
 }
 
 void Card::SetState(CardState stateNew) {
-	state = stateNew;
-	
-	id = state.id;
-	isSelected = state.isSelected;
-	place = state.place;
-	type = state.type;
+	id = stateNew.id;
+
+	SetSelection(stateNew.isSelected);
+	SetPlace(stateNew.place);
+	SetType(stateNew.type);
 }
 
 bool Card::CheckPointInBody(float pointX, float pointY) {
@@ -98,7 +98,7 @@ void Card::Update(float dt) {
 	}
 }
 
-void Card::Render(bool isHighlighted) {
+void Card::Render() {
 	Color color = GRAY;
 	if (type == Type::white) color = WHITE;
 	if (type == Type::black) color = DARKGRAY;

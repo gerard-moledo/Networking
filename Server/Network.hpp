@@ -8,14 +8,9 @@
 #include <WS2tcpip.h>
 
 #include <vector>
+#include <queue>
 
-constexpr int BUFFER_SIZE = 256;
-
-struct Client {
-	uint64_t id;
-	sockaddr_in address;
-	ConnectionState state;
-};
+constexpr int BUFFER_SIZE = sizeof Packet * 200;
 
 namespace Network {
 	extern WSADATA wsaData;
@@ -28,12 +23,13 @@ namespace Network {
 	extern std::vector<Client> clients;
 	extern std::vector<Game> games;
 
-	extern std::vector<Packet> sendQueue;
+	extern std::queue<Packet> receiveQueue;
+	extern std::vector<Packet> sendBacklog;
 
 	bool Initialize();
 
-	bool Listen();
-	Packet* ReceivePacket();
+	bool Listen(SOCKET socket);
+	int ReceivePackets(SOCKET receiveSocket);
 	void SendToGame(Packet data, Game game);
 	void Send(Packet data, Client client);
 

@@ -29,6 +29,17 @@ void Game::HandleInput() {
 	auto itCard = std::find_if(host.cards.begin(), host.cards.end(), [&](Card& card) { return card.isSelected; });
 	if (itCard != host.cards.end()) selectedCard = &*itCard;
 
+	for (Card& card : host.cards) {
+		if (card.place != Place::deck && !selectedCard) {
+			if (card.CheckPointInBody(mouseX, mouseY)) {
+				card.isHighlighted = true;
+			}
+			else {
+				card.isHighlighted = false;
+			}
+		}
+	}
+
 	if (IsMouseButtonPressed(0)) {
 		for (Card& card : host.cards) {
 			if (card.place == Place::deck) continue;
@@ -36,7 +47,9 @@ void Game::HandleInput() {
 			if (card.CheckPointInBody(mouseX, mouseY)) {
 				selectedCard = &card;
 				selectedCard->SetSelection(true);
+				selectedCard->isTargeting = false;
 				queueMessage = true;
+				printf("PRESSED\n");
 				break;
 			}
 		}
@@ -74,106 +87,16 @@ void Game::HandleInput() {
 			selectedCard->SetSelection(false);
 
 			queueMessage = true;
+			printf("RELEASED\n");
 		}
 	}
 }
 
-void Game::Begin(Packet* packet) {
+void Game::Begin() {
 	DrawCard(5);
 
-	if (packet->id == host.id && packet->isTurn ||
-		packet->id == peer.id && !packet->isTurn) 
-	{
-		phase = Phase::start;
-		Graphics::MoveWindow(100, 250);
-	}
-	else {
-		phase = Phase::wait;
-		Graphics::MoveWindow(1000, 250);
-	}
-}
-
-void Game::Update(float dt) {
-	if (phase == Phase::start) {
-		StartTurn();
-	}
-
-	HandleInput();
-
-	OrderCards(host);
-	OrderCards(peer);
-
-	for (Card& card : host.cards) {
-		card.Update(dt);
-	}
-
-	for (Card& card : peer.cards) {
-		card.Update(dt);
-	}
-
-	if (phase == Phase::end) {
-		phase = Phase::wait;
-	}
-}
-
-void Game::UpdateState(Packet* packet) {
-	if (packet->id == peer.id && !packet->isTurn && phase == Phase::wait)
-		phase = Phase::start;
-
-	Player& player = packet->id == host.id ? host : peer;
-
-	for (CardState& state : packet->cards) {
-		auto itCard = std::find_if(player.cards.begin(), player.cards.end(), [&](Card& card) { return card.id == state.id; });
-		if (itCard != player.cards.end()) {
-			itCard->SetState(state);
-
-			if (player.id == peer.id) {
-				itCard->isFaceUp = state.place == Place::field && !state.isSelected;
-			}
-		}
-	}
-
-	if (player.id == peer.id) player.shouldOrderCards = true;
-}
-
-void Game::Render(float dt) {
-	DrawRectangleRec(DECK_SLOT, DARKBROWN);
-	DrawRectangleRec(OPP_DECK_SLOT, DARKBROWN);
-
-	DrawRectangleRec(TURN_BUTTON, GOLD);
-	DrawRectangleLines(720 - 60, 300 - 25, 120, 50, BLACK);
-	if (phase == Phase::wait) {
-		DrawText("WAITING", 730 - 60 + 6, 300 - 10, 20, BLACK);
-	}
-	if (phase != Phase::wait) {
-		DrawText("END TURN", 722 - 60 + 6, 300 - 10, 20, BLACK);
-	}
-	
-	if (phase == Phase::wait) DrawRectangleRec(TURN_BUTTON, Color{ 200, 200, 200, 120 });
-
-	if (phase == Phase::wait) tint += dt * 110 * 5;
-	else					  tint -= dt * 110 * 5;
-
-	if (tint > 110.0f) tint = 110.0f;
-	if (tint < 0.0f) tint = 0.0f;
-
-	DrawRectangle(0, 500, 800, 100, TINT((unsigned char) tint));
-
-	DrawRectangle(0, 0, 800, 100, TINT((unsigned char) (110.0f - tint)));
-
-	Card* selectedCard = nullptr;
-	for (Card& card : peer.cards) {
-		if (card.isSelected) selectedCard = &card;
-		else card.Render(false);
-	}
-	if (selectedCard)
-		selectedCard->Render(true);
-
-	for (Card& card : host.cards) {
-		if (card.isSelected) selectedCard = &card;
-		else card.Render(false);
-	}
-	if (selectedCard) selectedCard->Render(true);
+	if (Game::phase == Phase::start) Graphics::MoveWindow(100, 250);
+	if (Game::phase == Phase::wait)  Graphics::MoveWindow(1000, 250);
 }
 
 void Game::StartTurn() {
@@ -203,6 +126,96 @@ void Game::DrawCard(int amount) {
 
 	host.shouldOrderCards = true;
 	queueMessage = true;
+}
+
+void Game::Update(float dt) {
+	if (phase == Phase::start) {
+		StartTurn();
+	}
+
+	HandleInput();
+
+	OrderCards(host);
+	OrderCards(peer);
+
+	for (Card& card : host.cards) {
+		card.Update(dt);
+	}
+
+	for (Card& card : peer.cards) {
+		card.Update(dt);
+	}
+}
+
+void Game::UpdateState(Packet packet) {
+	if (packet.id == 0) return;
+
+	if (phase == Phase::end)
+		phase = Phase::wait;
+
+	if (packet.id == peer.id && packet.phase == Phase::end && phase == Phase::wait)
+		phase = Phase::start;
+
+	Player* player = nullptr;
+	if (packet.id == host.id) player = &host;
+	if (packet.id == peer.id) 
+		player = &peer;
+	if (!player) return;
+
+	for (CardState& state : packet.cards) {
+		auto itCard = std::find_if(player->cards.begin(), player->cards.end(), [&](Card& card) { return card.id == state.id; });
+		if (itCard != player->cards.end()) {
+			itCard->SetState(state);
+
+
+			if (player->id == peer.id) {
+				itCard->state.index = state.index;
+				itCard->isFaceUp = state.place == Place::field &&  !state.isSelected;
+			}
+		}
+	}
+
+	if (player->id == peer.id) 
+		player->shouldOrderCards = true;
+}
+
+void Game::Render(float dt) {
+	DrawRectangleRec(DECK_SLOT, DARKBROWN);
+	DrawRectangleRec(OPP_DECK_SLOT, DARKBROWN);
+
+	DrawRectangleRec(TURN_BUTTON, GOLD);
+	DrawRectangleLines(720 - 60, 300 - 25, 120, 50, BLACK);
+	if (phase == Phase::wait) {
+		DrawText("WAITING", 730 - 60 + 6, 300 - 10, 20, BLACK);
+	}
+	if (phase != Phase::wait) {
+		DrawText("END TURN", 722 - 60 + 6, 300 - 10, 20, BLACK);
+	}
+
+	if (phase == Phase::wait) DrawRectangleRec(TURN_BUTTON, Color{ 200, 200, 200, 120 });
+
+	if (phase == Phase::wait) tint += dt * 110 * 5;
+	else					  tint -= dt * 110 * 5;
+
+	if (tint > 110.0f) tint = 110.0f;
+	if (tint < 0.0f) tint = 0.0f;
+
+	DrawRectangle(0, 500, 800, 100, TINT((unsigned char)tint));
+
+	DrawRectangle(0, 0, 800, 100, TINT((unsigned char)(110.0f - tint)));
+
+	auto RenderSorter = [](Card& bottom, Card& top) {
+		return !(bottom.isSelected || bottom.isHighlighted)
+			&& (top.isSelected || top.isHighlighted);
+	};
+	std::sort(peer.cards.begin(), peer.cards.end(), RenderSorter);
+	for (Card& card : peer.cards) {
+		card.Render();
+	}
+	std::sort(host.cards.begin(), host.cards.end(), RenderSorter);
+	for (Card& card : host.cards) {
+		card.Render();
+	}
 }
 
 void Game::OrderCards(Player& player) {
@@ -236,11 +249,16 @@ void Game::Order(Player& player, Place place) {
 
 	std::sort(container.begin(), container.end(), Sorter);
 
+	if (player.id == host.id) printf("Host:\n");
 	for (size_t i = 0; i < container.size(); i++) {
 		Card& card = *container[i];
 
-		if (card.state.index != i)
+		if (player.id == host.id && card.state.index != i) {
 			queueMessage = true;
+		}
+
+		if (player.id == host.id) 
+			printf("i: %llu, id: %u, index: %d\n\n", i, card.state.id, card.state.index);
 		card.state.index = i;
 
 		if (player.id == host.id && card.isSelected) continue;
@@ -248,4 +266,5 @@ void Game::Order(Player& player, Place place) {
 		float targetX = 400.0f + (i - (container.size() - 1) / 2.0f) * gap;
 		card.SetTarget(targetX, level);
 	}
+	printf("\n\n");
 }

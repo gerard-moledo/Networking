@@ -2,7 +2,10 @@
 
 #include "Network.hpp"
 
-Player::Player(uint64_t id) : id(id), isTurn(false) {
+void Player::Setup(uint64_t clientId, bool isFirst) {
+	id = clientId;
+	phase = isFirst ? Phase::start : Phase::wait;
+
 	for (size_t i = 0; i < cards.size(); i++) {
 		cards[i].id = i;
 		cards[i].isSelected = false;
@@ -11,16 +14,16 @@ Player::Player(uint64_t id) : id(id), isTurn(false) {
 	}
 }
 
-void Player::UpdateState(Packet* packet) {
-	if (packet && id == packet->id) {
-		isTurn = packet->isTurn;
+void Player::UpdateState(Packet packet) {
+	if (id == packet.id) {
+		phase = packet.phase;
 
 		for (size_t i = 0; i < cards.size(); i++) {
-			cards[i] = packet->cards[i];
+			cards[i] = packet.cards[i];
 		}
 	}
-	if (packet && id != packet->id && !packet->isTurn) {
-		isTurn = true;
+	if (id != packet.id && packet.phase == Phase::end) {
+		phase = Phase::start;
 	}
 }
 
@@ -28,23 +31,36 @@ void Player::SendState() {
 	Packet data{};
 	data.id = id;
 	data.state = ConnectionState::game;
-	data.isTurn = isTurn;
+	data.phase = phase;
 	for (size_t i = 0; i < cards.size(); i++) {
 		data.cards[i] = cards[i];
 	}
-	Network::sendQueue.emplace_back(data);
+	Network::sendBacklog.emplace_back(data);
 }
 
-Game::Game(uint32_t id, uint64_t hostId, uint64_t peerId) : id(id), host(Player(hostId)), peer(Player(peerId)) {
-	host.isTurn = true;
+
+Client::Client(SOCKET mSocket)
+	: mSocket(mSocket), id(0), state(ConnectionState::lobby)
+{
+
 }
 
-void Game::Update(Packet* packet) {
-	host.UpdateState(packet);
-	peer.UpdateState(packet);
 
-	host.SendState();
-	peer.SendState();
+Game::Game(uint32_t id, Client clientHost, Client clientPeer)
+	: id(id), host(clientHost), peer(clientPeer)
+{
+	host.player.Setup(clientHost.id, true);
+	peer.player.Setup(clientPeer.id, false);
+}
+
+void Game::Update(Packet packet) {
+	if (packet.id != 0) {
+		host.player.UpdateState(packet);
+		peer.player.UpdateState(packet);
+	}
+
+	host.player.SendState();
+	peer.player.SendState();
 }
 
 bool Game::IsAPlayer(uint64_t id) {

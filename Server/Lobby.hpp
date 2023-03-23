@@ -5,8 +5,9 @@
 #include "Util.hpp"
 
 namespace Lobby {
-	void AddClient(uint64_t id);
-	void Update(Packet* packet);
+	void AddClient(SOCKET clientSocket);
+	void HandleDisconnections(Packet packet);
+	void Update(Packet packet);
 	void CreateGame(Client& host, Client& peer);
 }
 

@@ -5,7 +5,6 @@
 
 enum struct Place : unsigned char { deck, hand, field };
 enum struct Type : unsigned char { white, black, green, blue };
-enum struct Phase : unsigned char { start, draw, play, end, wait };
 
 struct CardState
 {
@@ -19,12 +18,13 @@ struct CardState
 };
 
 enum struct ConnectionState : uint8_t { none, lobby, game, disconnected };
+enum struct Phase : uint8_t { start, draw, play, end, wait };
 
 struct Packet
 {
 	uint64_t id;
 	ConnectionState state;
-	bool isTurn;
+	Phase phase;
 	CardState cards[10];
 };
 

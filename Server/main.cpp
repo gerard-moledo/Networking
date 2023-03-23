@@ -20,50 +20,48 @@ int main() {
 	}
 
 	while (true) {
-		Packet* packet = nullptr;
-		if (Network::Listen()) {
-			packet = Network::ReceivePacket();
+		if (Network::Listen(Network::Socket)) {
+			SOCKET newSocket = accept(Network::Socket, nullptr, nullptr);
+			if (newSocket == INVALID_SOCKET) {
+				printf("accept() failed: %d\n", WSAGetLastError());
+			}
+			else {
+				Lobby::AddClient(newSocket);
+			}
 		}
 		
-		if (packet && packet->state == ConnectionState::none) {
-			auto itFoundClient = std::find_if(Network::clients.begin(), Network::clients.end(), 
-												[&](Client& client) { return client.id == packet->id; });
-			if (itFoundClient == Network::clients.end()) {
-				Lobby::AddClient(packet->id);
-
-				Packet data{};
-				data.id = packet->id;
-				data.state = ConnectionState::lobby;
-				Network::Send(data, Network::clients.back());
+		for (Client& client : Network::clients) {
+			if (Network::Listen(client.mSocket)) {
+				int bytesReceived = Network::ReceivePackets(client.mSocket);
+				if (bytesReceived > 0) 
+					client.id = Network::receiveQueue.back().id;
 			}
 		}
-		if (packet && packet->state == ConnectionState::disconnected) {
-			auto itClient = std::remove_if(Network::clients.begin(), Network::clients.end(),
-														[&](Client& client) { return client.id == packet->id; });
-			auto itGame = std::remove_if(Network::games.begin(), Network::games.end(),
-											[&](Game& game) { return game.IsAPlayer(itClient->id); });
-			Network::clients.erase(itClient, Network::clients.end());
-			Network::games.erase(itGame, Network::games.end());
-		}
 
-		Lobby::Update(packet);
+		while (!Network::receiveQueue.empty()) {
+			Packet packet = Network::receiveQueue.front();
+			Network::receiveQueue.pop();
 
-		for (Game& game : Network::games) {
-			bool shouldUpdateState = packet && packet->state == ConnectionState::game && game.IsAPlayer(packet->id);
-			if (shouldUpdateState) {
-				game.Update(packet);
+			Lobby::HandleDisconnections(packet);
+
+			Lobby::Update(packet);
+
+			for (Game& game : Network::games) {
+				if (packet.state == ConnectionState::game && game.IsAPlayer(packet.id)) {
+					game.Update(packet);
+				} 
 			}
-			for (auto it = Network::sendQueue.begin(); it != Network::sendQueue.end();) {
-				if (game.IsAPlayer(it->id)) {
-					Network::SendToGame(*it, game);
-					it = Network::sendQueue.erase(it);
-					continue;
+			for (Game& game : Network::games) {
+				for (auto it = Network::sendBacklog.begin(); it != Network::sendBacklog.end();) {
+					if (game.IsAPlayer(it->id)) {
+						Network::SendToGame(*it, game);
+						it = Network::sendBacklog.erase(it);
+						continue;
+					}
+					it++;
 				}
-				it++;
 			}
 		}
-
-
 	}
 
 	exit(0);

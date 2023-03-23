@@ -5,17 +5,19 @@
 #include <iostream>
 #include <ws2def.h>
 
-//#define USE_DOMAIN "domain"
+#define SERVER_DOMAIN "cataclysmwar.com"
 
 namespace Network {
 	WSADATA wsaData;
 	SOCKET Socket = INVALID_SOCKET;
-
 	sockaddr_in serverAddr;
 	int serverAddrSize = sizeof serverAddr;
-	fd_set readSet;
 
-	char data[256];
+	std::queue<Packet> packetQueue;
+	fd_set readSet;
+	fd_set writeSet;
+
+	char dataBuffer[BUFFER_SIZE];
 
 	uint64_t sessionId;
 	ConnectionState state = ConnectionState::none;
@@ -29,7 +31,7 @@ bool Network::Initialize() {
 		return false;
 	}
 
-	Socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (Socket == INVALID_SOCKET) {
 		printf("socket() failed: %d", WSAGetLastError());
 		WSACleanup();
@@ -38,30 +40,24 @@ bool Network::Initialize() {
 
 
 	ADDRINFOA hints{ };
-	hints.ai_flags = AI_CANONNAME;
+	//hints.ai_flags = AI_PASSIVE;
 	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_DGRAM;
-	hints.ai_protocol = IPPROTO_UDP;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
 
-#ifdef USE_DOMAIN
 	ADDRINFOA* result;
-	int addrResult = getaddrinfo(USE_DOMAIN, "3816", &hints, &result);
+	int addrResult = getaddrinfo(SERVER_DOMAIN, "3816", &hints, &result);
 	if (addrResult != 0) {
 		printf("getaddrinfo() failed: %d", WSAGetLastError());
 		return false;
 	}
 	serverAddr = *(sockaddr_in*)result->ai_addr;
-#else
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port = htons(3816);
-	int ptonResult = inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr.S_un.S_addr);
-	if (ptonResult != 1) {
-		printf("inet_pton() failed: %d\n", ptonResult);
-		if (ptonResult == -1) {
-			printf("Additional error: %d\n", WSAGetLastError());
-		}
-	}
-#endif
+
+	freeaddrinfo(result);
+
+	u_long unblock = 1;
+	ioctlsocket(Socket, FIONBIO, &unblock);
+
 	for (int i = 0; i < 64; i++) {
 		sessionId += ((uint64_t) (rand() % 2)) << i;
 	}
@@ -69,39 +65,60 @@ bool Network::Initialize() {
 	return true;
 }
 
+void Network::SendState() {
+	Packet data{};
+	data.id = Network::sessionId;
+	data.state = ConnectionState::game;
+	data.phase = Game::phase;
+	for (size_t i = 0; i < Game::host.cards.size(); i++) {
+		data.cards[i] = Game::host.cards[i].state;
+	}
+	Network::Send(data);
+}
+
 void Network::Send(Packet data) {
-	int sendResult = sendto(Socket, (char*)&data, sizeof Packet, 0, (SOCKADDR*)&serverAddr, sizeof serverAddr);
+	printf("SENT\n");
+	int sendResult = send(Socket, (char*)&data, sizeof Packet, 0);
 	if (sendResult == SOCKET_ERROR) {
-		printf("sendto() failed %d\n", WSAGetLastError());
+		printf("send() failed %d\n", WSAGetLastError());
 		return;
 	}
 }
 
-bool Network::Listen() {
+bool Network::Listen(bool checkRead, bool checkWrite) {
 	FD_ZERO(&readSet);
-	FD_SET(Socket, &readSet);
+	if (checkRead) FD_SET(Socket, &readSet);
+
+	FD_ZERO(&writeSet);
+	if (checkWrite) FD_SET(Socket, &writeSet);
 	timeval timeout{ 0, 0 };
-	int selectResult = select(NULL, &readSet, nullptr, nullptr, &timeout);
+	int selectResult = select(NULL, &readSet, &writeSet, nullptr, &timeout);
 	if (selectResult == SOCKET_ERROR) {
 		printf("select() failed: %d\n", WSAGetLastError());
 		return false;
 	}
 
-	return readSet.fd_count > 0;
+	return checkRead && readSet.fd_count > 0 || checkWrite && writeSet.fd_count > 0;
 }
 
-Packet* Network::Receive() {
-	int recvResult = recvfrom(Socket, data, sizeof data, 0, (SOCKADDR*)&serverAddr, &serverAddrSize);
+void Network::ReceivePackets() {
+	int recvResult = recv(Socket, dataBuffer, sizeof dataBuffer, 0);
 	if (recvResult == SOCKET_ERROR) {
-		printf("recvfrom() failed: %d\n", WSAGetLastError());
-		return nullptr;
+		printf("recv() failed: %d\n", WSAGetLastError());
+		return;
 	}
 
-	return (Packet*)data;
+	int numPackets = recvResult / (int) sizeof Packet;
+
+	//printf("Received: %d\n", recvResult);
+	for (int i = 0; i < numPackets; i++) {
+		Packet data = *(((Packet*)dataBuffer) + i);
+		Network::packetQueue.emplace(data);
+	}
 }
 
 void Network::Deinitialize() {
-	Packet data;
+	Packet data{};
 	data.id = sessionId;
 	data.state = ConnectionState::disconnected;
 	Send(data);
